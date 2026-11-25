@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "windows": {
-    "version": "1.1.0",
-    "url": "https://github.com/XiongBoT/bme-ecg-system/releases/tag/desktop-v1.1.0",
-    "notes": "已发布的 Windows 免安装版本。请在发布页核对说明与校验文件。"
+    "version": "1.2.0",
+    "url": "https://github.com/XiongBoT/bme-ecg-system/releases/tag/desktop-v1.2.0",
+    "notes": "公开试用版：连接助手与更新提醒。完整解压后运行；网页功能取决于云端部署，真实电脑体验仍待验收。请核对发布页及 SHA-256。"
   },
   "android": {
-    "version": "1.0.0",
-    "version_code": 1,
-    "url": "https://github.com/XiongBoT/bme-ecg-system/releases/tag/android-v1.0.0-preview.1",
-    "notes": "已发布的 Android 试用版本。安装前请阅读发布页说明。"
+    "version": "1.1.0",
+    "version_code": 4,
+    "url": "https://github.com/XiongBoT/bme-ecg-system/releases/tag/android-v1.1.0-preview.1",
+    "notes": "公开试用版：心电健康助手、账号申请、趋势、固定时长测量、设置与更新提醒。沿用原签名；新功能需云端及终端配套升级，实体手机仍待验收。请核对发布页及 SHA-256。"
   }
 }
