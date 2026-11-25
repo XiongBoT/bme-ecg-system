@@ -4,6 +4,13 @@
 
 “未发布”指尚未发布对应下载或部署运行，不等于源码未合并。
 
+## 2026-11-25 · README 首页优化
+
+- 下载入口前置，增加三步使用说明和简明功能概览，将长导航表整理为按任务分类的主要指南。
+- 系统数据流、仓库目录和开发命令按需展开，保留原有章节锚点及完整指南入口。
+- 首页下载指向已公开的 Android 1.1.0 与 Windows 1.2.0 试用包，明确应用发布与服务器配套升级的区别；发布登记由任务 #55 独立维护。
+- 仅更新文档，不修改运行代码或部署。关联[任务 #57](https://github.com/XiongBoT/bme-ecg-system/issues/57)。
+
 ## 2026-11-25 · Android 1.1.0 / Windows 1.2.0 公开试用
 
 - 从已合并源码 `87f23ba` 构建并发布 [Android 1.1.0（4）](https://github.com/XiongBoT/bme-ecg-system/releases/tag/android-v1.1.0-preview.1) 和 [Windows 1.2.0](https://github.com/XiongBoT/bme-ecg-system/releases/tag/desktop-v1.2.0)，包含健康助手与客户端更新提醒。
