@@ -11,6 +11,12 @@
 - 首页下载指向已公开的 Android 1.1.0 与 Windows 1.2.0 试用包，明确应用发布与服务器配套升级的区别；发布登记由任务 #55 独立维护。
 - 仅更新文档，不修改运行代码或部署。关联[任务 #57](https://github.com/XiongBoT/bme-ecg-system/issues/57)。
 
+## 2026-11-25 · Android 1.1.0 / Windows 1.2.0 公开试用
+
+- 从已合并源码 `87f23ba` 构建并发布 [Android 1.1.0（4）](https://github.com/XiongBoT/bme-ecg-system/releases/tag/android-v1.1.0-preview.1) 和 [Windows 1.2.0](https://github.com/XiongBoT/bme-ecg-system/releases/tag/desktop-v1.2.0)，包含健康助手与客户端更新提醒。
+- 两项 Release 均为公开预发布，安装包与 SHA-256 文件已从匿名公开地址下载核验；Android 沿用原签名。包摘要、版本与验证边界见[统一状态页](docs/版本与交付状态.md)。
+- 同步下载入口与 `client-releases.json`。本次没有部署生产服务或终端；新功能仍需配套服务升级，实体手机、电脑及真实采集验收待完成。
+
 ## 未发布：片段标注与每日自动备份
 
 - 本人完成记录可按最多60秒范围添加、编辑、撤下和恢复标注，并定位回波形；保留修改版本，不覆盖原始数据或模型标签。
