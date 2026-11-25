@@ -1,6 +1,6 @@
 """Bounded administrative metadata; never exposes waveforms or credentials."""
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 from pathlib import Path
 import re
@@ -82,7 +82,7 @@ class DatabaseManager:
                 'backup_policy': 'server_only', 'measured_at': time.time()}
 
     def records(self, *, limit=25, offset=0, q='', state='active', owner_id=None, device_id=None,
-                started_from=None, started_before=None):
+                started_from=None, started_before=None, registered_day=None):
         clauses, params = [], []
         if state == 'trashed': clauses.append('d.trashed_at IS NOT NULL')
         else:
@@ -94,6 +94,12 @@ class DatabaseManager:
         if owner_id == 'unassigned': clauses.append('s.owner_id IS NULL')
         elif owner_id: clauses.append('s.owner_id=?'); params.append(owner_id)
         if device_id: clauses.append('s.ingest_device_id=?'); params.append(device_id)
+        if registered_day:
+            if registered_day.isoformat() == '9999-12-31':
+                raise HTTPException(422, '登记日期须早于 9999-12-31')
+            start = datetime.combine(registered_day, datetime.min.time(), timezone(timedelta(hours=8)))
+            clauses.append('julianday(s.created_at)>=julianday(?) AND julianday(s.created_at)<julianday(?)')
+            params.extend([start.isoformat(), (start + timedelta(days=1)).isoformat()])
         for value, op in ((started_from, '>='), (started_before, '<')):
             if value:
                 clauses.append("julianday(json_extract(s.metadata,'$.started_utc'))" + op + 'julianday(?)')

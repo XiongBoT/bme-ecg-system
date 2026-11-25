@@ -39,6 +39,7 @@ function enterWorkspace(payload) {
   $('change-password').hidden=!state.auth;
   $('manage-devices').hidden=!state.user?.is_admin;
   $('manage-database').hidden=!state.user?.is_admin;
+  $('manage-console').hidden=!state.user?.is_admin;
   text('account-name',state.user ? state.user.username+' · 我的记录' : '本机工作台');
   $('login-submit').disabled=false;connectionStatus();
   refresh();

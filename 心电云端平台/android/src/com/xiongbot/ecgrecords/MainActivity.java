@@ -163,9 +163,9 @@ public final class MainActivity extends Activity {
                 else Toast.makeText(MainActivity.this,"请直接点击记录页的下载按钮",Toast.LENGTH_LONG).show();
                 return true;
             }
-            if (request.isForMainFrame() && WebPolicy.trusted(uri.toString()) && "/devices".equals(uri.getPath())) {
-                try {startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(WebPolicy.ORIGIN+"/devices")));}
-                catch(Exception e) {Toast.makeText(MainActivity.this,"请在系统浏览器打开项目网站管理设备",Toast.LENGTH_LONG).show();}
+            if (request.isForMainFrame() && WebPolicy.managementPage(uri.toString())) {
+                try {startActivity(new Intent(Intent.ACTION_VIEW,uri));}
+                catch(Exception e) {Toast.makeText(MainActivity.this,"请在系统浏览器打开项目网站的管理后台",Toast.LENGTH_LONG).show();}
                 return true;
             }
             if (WebPolicy.trusted(uri.toString())) return false;
