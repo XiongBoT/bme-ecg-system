@@ -35,11 +35,13 @@ var UserExperience = (() => {
     $('report-print').disabled=true;
   }
   function selectionChanged(){
+    if(typeof RecordAnnotations!=='undefined')RecordAnnotations.changed();
     if(typeof RecordReview!=='undefined')RecordReview.changed();
     detailTime=null;detailStale=false;clearReport();renderTimes();renderSummary();
     $('record-details').open=!window.matchMedia('(max-width: 720px)').matches;
   }
   function clear(){
+    if(typeof RecordAnnotations!=='undefined')RecordAnnotations.clear();
     if(typeof RecordReview!=='undefined')RecordReview.clear();
     listTime=detailTime=null;listStale=detailStale=false;guideInitialized=false;manualBusy=false;pull=null;
     clearReport();$('device-list').replaceChildren();$('latest-record').disabled=true;

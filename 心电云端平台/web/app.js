@@ -319,6 +319,7 @@ async function loadWave() {
     const hasValid=wave.points.some(p=>p[1]!==null);
     text('chart-empty',wave.points.length?'当前窗口均为无效采样，数据已保存':'该范围暂无数据');
     $('chart-empty').hidden=hasValid;draw();experience('detailUpdated');
+    if(typeof RecordAnnotations!=='undefined')RecordAnnotations.updated();
   } catch(error) {
     if(sid===state.selected && generation===state.generation) {
       experience('detailFailed');
