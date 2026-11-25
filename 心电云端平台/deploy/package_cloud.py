@@ -11,6 +11,7 @@ OUTPUT = ROOT / 'deploy' / 'dist'
 MEMBERS = (
     'server.py', 'protocol.py', 'run_server.py', 'uploader.py', 'requirements.txt', 'requirements-model.txt',
     'auth_store.py', 'workspace_store.py', 'analysis_tasks.py', 'manage_accounts.py', 'measurement_store.py',
+    'account_applications.py', 'web/applications.js', 'health_routes.py', 'web/health.js', 'web/health_core.js', 'web/health.css',
     'device_store.py', 'device_routes.py', 'web/devices.js',
     'database_management.py', 'database_routes.py', 'database_backup.py', 'maintenance_tasks.py', 'tools/restore_database.py',
     'web/database-manager.html', 'web/database-manager.js', 'web/database-manager.css',

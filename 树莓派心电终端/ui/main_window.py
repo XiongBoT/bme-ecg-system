@@ -186,7 +186,7 @@ class MainWindow:
         self._summary_session = None
         if isinstance(getattr(controller, "data_dir", None), (str, Path)):
             from cloud.service import CloudService
-            self.cloud = CloudService(controller.data_dir)
+            self.cloud = CloudService(controller.data_dir, controller=controller)
         self._build()
         self.root.bind("<F11>", lambda _: self.toggle_fullscreen())
         self.root.bind("<Escape>", lambda _: self.root.attributes("-fullscreen", False))
@@ -728,7 +728,9 @@ class MainWindow:
                 self.cloud.resume()
                 self._cloud_resume_pending = False
             state = self.cloud.snapshot()
-            self.cloud.update_device_status(self._last_snapshot)
+            remote_port=self.port.get().strip() if SOURCES[self.source.get()]=='serial' else ''
+            self.cloud.update_device_status(dict(self._last_snapshot,remote_port=remote_port,
+                remote_idle=not (self._closing or self._action_pending or self._poweroff_pending)))
             online = state["connection"] == "online"
             hint = '未授权' if state['connection']=='unauthorized' else '离线' if state['connection']=='offline' else '连接中'
             text = ("云端 ●" if online else '云端 · '+hint) if self.root.winfo_width() < 1000 else "云端 · " + ("可上传" if online else hint)

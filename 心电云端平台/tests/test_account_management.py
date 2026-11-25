@@ -121,7 +121,7 @@ class AccountManagementTests(unittest.TestCase):
         self.assertIsInstance(self.overview(result.json()['id']).get('created_at'), (float, int))
         self.assertEqual(self.client.post('/api/admin/users', json=payload).status_code, 422)
         for username, password in [('ab', payload['password']), ('bad name', payload['password']),
-                                   ('_test', payload['password']), ('valid-user', 'short')]:
+                                   ('_test', payload['password']), ('valid-user', 'shrt')]:
             response = self.client.post('/api/admin/users', json={'username': username, 'password': password})
             self.assertEqual(response.status_code, 422)
 

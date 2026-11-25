@@ -41,7 +41,10 @@ function drawDeviceList(){
   const button=document.createElement('button');button.type='button';button.className='managed-device'+(manager.selected?.device_id===d.device_id?' active':'');
   const name=document.createElement('strong'),detail=document.createElement('span');name.textContent=d.name;
   detail.textContent=d.device_id+' · '+(d.active?'已启用':'已停用')+' · '+(d.legacy_shared?'旧版共享选人':d.user_ids.length+' 个授权账号');
-  button.append(name,detail);button.onclick=()=>{if(!manager.busy)drawDeviceEditor(d);};parent.append(button);
+  const facts=document.createElement('dl');facts.className='device-facts';
+  const info=d.device_info||{};
+  for(const [label,value]of [['连接状态',({online:'在线',offline:'离线',unknown:'尚未接入',disabled:'已停用'})[d.connection]||'未知'],['最近上报',d.last_seen?new Date(d.last_seen*1000).toLocaleString():'未收到'],['接入时间',d.created_at?new Date(d.created_at*1000).toLocaleString():'未记录'],['硬件型号',info.model||'未提供'],['系统',info.platform||'未提供'],['终端版本',info.app_version||'未提供'],['串口',info.serial_port||'未选择'],['采样率',info.sample_rate_hz?info.sample_rate_hz+' Hz':'未提供'],['剩余空间',Number.isFinite(d.free_bytes)?(d.free_bytes/1073741824).toFixed(2)+' GB':'未提供'],['记录数量',d.record_count??'未知'],['手机发起测量',d.remote_ready?'已就绪':'未就绪']]){const pair=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);pair.append(dt,dd);facts.append(pair);}
+  button.append(name,detail,facts);button.onclick=()=>{if(!manager.busy)drawDeviceEditor(d);};parent.append(button);
  }
 }
 async function reloadDevices(prefer){

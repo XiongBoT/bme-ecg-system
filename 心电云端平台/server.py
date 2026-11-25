@@ -84,6 +84,15 @@ class DetailsInput(StrictModel):
     note: str = Field(default='', max_length=1000)
 
 
+class DeviceInformation(StrictModel):
+    model: str = Field(default='', max_length=100)
+    platform: str = Field(default='', max_length=100)
+    app_version: str = Field(default='', max_length=40)
+    serial_port: str = Field(default='', max_length=100)
+    sample_rate_hz: Literal[360] = 360
+    protocol: str = Field(default='ECG UART 7-byte', max_length=80)
+
+
 class HeartbeatInput(StrictModel):
     state: Literal['standby', 'acquiring', 'saving', 'error']
     owner_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
@@ -95,6 +104,8 @@ class HeartbeatInput(StrictModel):
     free_bytes: int | None = Field(default=None, ge=0)
     pending_uploads: int = Field(default=0, ge=0, le=10000)
     upload_phase: str = Field(default='idle', max_length=40)
+    remote_ready: bool = Field(default=False, strict=True)
+    device_info: DeviceInformation | None = None
 
 
 class LoginInput(StrictModel):
@@ -111,7 +122,7 @@ class AssignInput(StrictModel):
 
 
 class NewPasswordInput(StrictModel):
-    new_password: str = Field(min_length=10, max_length=128)
+    new_password: str = Field(min_length=5, max_length=128)
 
 
 class ChangePasswordInput(NewPasswordInput):
@@ -223,7 +234,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     async def guard(request: Request, call_next):
         who = {'kind': 'legacy'}
         if request.url.path.startswith('/api/'):
-            if auth_enabled and request.url.path not in ('/api/auth/config', '/api/auth/login'):
+            if auth_enabled and request.url.path not in ('/api/auth/config', '/api/auth/login', '/api/account-applications'):
                 who = auth.authenticate(request)
                 if who is None:
                     return JSONResponse({'detail': '请先登录'}, status_code=401)
@@ -273,6 +284,11 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
 
     add_device_routes(app,devices,require_admin)
     add_database_routes(app, database_manager, maintenance, require_admin, identity.get)
+
+    from health_routes import add_routes as add_health_routes
+    add_health_routes(app, connect, identity, devices, require_device, auth_enabled)
+    from account_applications import add_routes as add_application_routes
+    add_application_routes(app,connect,require_admin,auth_enabled)
 
     @app.get('/api/auth/config')
     def auth_config():
@@ -420,7 +436,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
         with closing(connect()) as db:
             db.execute('SELECT 1').fetchone()
         return {'ok': True, 'service': 'ecg-course-demo', 'device_id': device_id,
-                'deployment': deployment, 'time': now(), 'auth_required': auth_enabled, 'workspace_version': 1, **model_service.identity()}
+                'deployment': deployment, 'time': now(), 'auth_required': auth_enabled, 'workspace_version': 1, 'health_assistant_version': 1, **model_service.identity()}
 
     @app.put('/api/sessions/{session_id}')
     def register(session_id: str, payload: SessionInput):

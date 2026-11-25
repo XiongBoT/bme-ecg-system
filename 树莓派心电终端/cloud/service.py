@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 import os
+import platform
 from pathlib import Path
 import threading
 import time
@@ -24,7 +25,7 @@ def submit_analysis(client, sid):
 
 
 class CloudService:
-    def __init__(self, data_dir, url=None, client_factory=Uploader, heartbeat_interval=10):
+    def __init__(self, data_dir, url=None, client_factory=Uploader, heartbeat_interval=10, controller=None):
         self.root = Path(data_dir)
         self.folder = self.root / 'cloud'
         self.url = url or os.getenv('ECG_CLOUD_URL','').strip() or ('http://127.0.0.1:8768' if os.name == 'nt' else 'http://127.0.0.1:8766')
@@ -38,6 +39,15 @@ class CloudService:
         self.heartbeat_wake = threading.Event()
         self.heartbeat_interval = heartbeat_interval
         self.device_status = dict(state='standby')
+        self.health_assistant_supported = False
+        self.controller = controller
+        self.remote = None
+        self.device_info = dict(model=platform.machine(), platform=platform.system()+' '+platform.release(),
+                                app_version='health-assistant-1.1.0',serial_port='',sample_rate_hz=360,protocol='AA55 7-byte / 115200 8N1')
+        try:
+            model=Path('/proc/device-tree/model').read_text().strip('\x00\n ')
+            if model:self.device_info['model']=model[:100]
+        except OSError:pass
         self.generation = 0
         self.job = None
         self.state = dict(connection='connecting', message='自动连接云端…', session_id=None,
@@ -61,6 +71,9 @@ class CloudService:
         self.thread.start()
         self.heartbeat_thread = threading.Thread(target=self._heartbeat, name='ecg-heartbeat', daemon=True)
         self.heartbeat_thread.start()
+        if controller is not None:
+            from .remote_measurement import RemoteMeasurements
+            self.remote=RemoteMeasurements(controller,self)
 
     def update_device_status(self, snapshot):
         """Copy only bounded scalars; caller may be the 100-ms UI thread."""
@@ -72,6 +85,12 @@ class CloudService:
                       signal_text=str(snapshot.get('signal_text',''))[:120] if running else '',
                       received=max(0,int(snapshot.get('received') or 0)) if running else 0,
                       saved=max(0,int(snapshot.get('saved') or 0)) if running else 0)
+        port=snapshot.get('remote_port') or ''
+        ready=bool(snapshot.get('remote_idle') and port and not running and not snapshot.get('error'))
+        if self.remote:self.remote.configure(port,ready)
+        fields.update(remote_ready=bool(self.remote and self.remote.ready()),
+                      device_info=dict(self.device_info,serial_port=str(port)[:100]),
+                      free_bytes=(snapshot.get('storage') or {}).get('free_bytes'))
         with self.lock: self.device_status = fields
 
     def _heartbeat(self):
@@ -84,6 +103,7 @@ class CloudService:
                 health = client.request('GET', '/health')
                 if health.get('service') != 'ecg-course-demo' or health.get('deployment') != 'cloud':
                     raise UploadError('设备状态地址不是已配置的云端')
+                self.health_assistant_supported=health.get('health_assistant_version',0)>=1
                 if health.get('workspace_version',0) >= 1:
                     recipients = client.request('GET', '/api/device/recipients')
                     users = recipients.get('users', [])[:500]
@@ -93,6 +113,8 @@ class CloudService:
                         self.state.update(recipients=users, auth_required=cache['auth_required'])
                         payload = dict(self.device_status, upload_phase=self.state['phase'], pending_uploads=int(bool(self.job)))
                     if changed: atomic_json(self.folder/'recipients.json', cache)
+                    if not self.health_assistant_supported:
+                        payload.pop('device_info',None);payload.pop('remote_ready',None)
                     client.request('PUT','/api/device/heartbeat',payload)
                     self._publish(heartbeat_status='online')
             except Cancelled: pass
@@ -145,18 +167,20 @@ class CloudService:
         self.heartbeat_wake.set()
 
     def close(self):
+        if self.remote:self.remote.close()
         self.stop.set()
         self.wake.set()
         self.heartbeat_wake.set()
 
     def wait(self, timeout=0):
         deadline = time.monotonic()+timeout
-        for thread in (self.thread, self.heartbeat_thread):
+        for thread in (self.thread, self.heartbeat_thread) + ((self.remote.thread,) if self.remote else ()) :
             thread.join(max(0,deadline-time.monotonic()))
-        return not self.thread.is_alive() and not self.heartbeat_thread.is_alive()
+        return not self.thread.is_alive() and not self.heartbeat_thread.is_alive() and not (self.remote and self.remote.thread.is_alive())
 
     def resume(self):
         """Recover after a rejected power-off; durable jobs remain resumable."""
+        if self.remote and self.remote.thread.is_alive():return False
         if self.thread.is_alive() or self.heartbeat_thread.is_alive():
             return False
         self.stop.clear()
@@ -164,7 +188,13 @@ class CloudService:
         self.thread.start()
         self.heartbeat_thread = threading.Thread(target=self._heartbeat, name='ecg-heartbeat', daemon=True)
         self.heartbeat_thread.start()
+        self._resume_remote()
         return True
+
+    def _resume_remote(self):
+        if self.controller is not None:
+            from .remote_measurement import RemoteMeasurements
+            self.remote=RemoteMeasurements(self.controller,self)
 
     def _finish(self, generation, **fields):
         with self.command_lock:

@@ -39,11 +39,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.net.ssl.HttpsURLConnection;
 import org.json.JSONTokener;
+import org.json.JSONObject;
+import java.io.ByteArrayOutputStream;
 
 public final class MainActivity extends Activity {
     private WebView web;
     private LinearLayout root;
     private ReportPrinter reportPrinter;
+    private CredentialStore credentials;
+    private final Object credentialLock=new Object();
+    private int credentialGeneration=0;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private String exportSession, exportUser, exportCookie;
     private static final int SAVE_CSV = 14;
@@ -53,6 +58,7 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         reportPrinter=new ReportPrinter(this);
+        credentials=new CredentialStore(this);
         if(cacheCleaned.compareAndSet(false,true)) {
             File[] abandoned=getCacheDir().listFiles((dir,name)->name.startsWith("ecg-export-")&&name.endsWith(".csv"));
             if(abandoned!=null)for(File file:abandoned)file.delete();
@@ -71,12 +77,12 @@ public final class MainActivity extends Activity {
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
         toolbar.setPadding(dp(12), 0, dp(8), 0);
         TextView name = new TextView(this);
-        name.setText("心电记录"); name.setTextSize(16); name.setTextColor(Color.rgb(8,127,113));
+        name.setText("心电健康助手"); name.setTextSize(16); name.setTextColor(Color.rgb(8,127,113));
         toolbar.addView(name, new LinearLayout.LayoutParams(0, dp(48), 1));
         name.setGravity(Gravity.CENTER_VERTICAL);
         Button help = new Button(this); help.setText("说明");
-        help.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("心电记录 " + appVersion())
-            .setMessage("使用已有项目账号登录。查看记录和云端分析需要联网。\n\n账号与心电数据仅发送至项目服务器：\n" + WebPolicy.ORIGIN + "\n\n应用不包含账号密码，不自动保存心电文件。点击下载时可自行选择 CSV 保存位置。\n\n本应用用于课程研究。")
+        help.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("心电健康助手 " + appVersion())
+            .setMessage("使用已有项目账号登录。查看记录和云端分析需要联网。\n\n账号与心电数据仅发送至项目服务器：\n" + WebPolicy.ORIGIN + "\n\n可自愿记住账号密码，使用 Android 系统密钥加密保存在本机；可在 APP 设置中清除。不自动保存心电文件。点击下载时可自行选择 CSV 保存位置。\n\n本应用用于课程研究。")
             .setPositiveButton("知道了", null).show());
         Button reload = new Button(this); reload.setText("重连");
         reload.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("重新连接？")
@@ -137,6 +143,61 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private boolean loginOrigin(){
+        if(web==null||!WebPolicy.trusted(web.getUrl()))return false;
+        String path=Uri.parse(web.getUrl()).getPath();return "/".equals(path)||"/index.html".equals(path);
+    }
+    private void credentialCommand(String action){
+        if(!loginOrigin())return;
+        final int generation; synchronized(credentialLock){generation=++credentialGeneration;}
+        if("clear".equals(action)){
+            io.execute(()->{try{synchronized(credentialLock){credentials.clear();}}catch(Exception ignored){runOnUiThread(()->Toast.makeText(this,"保存的登录信息未清除，请在应用设置中重试",Toast.LENGTH_LONG).show());}});return;
+        }
+        if("load".equals(action)){
+            io.execute(()->{
+                try{
+                    final JSONObject saved; synchronized(credentialLock){if(generation!=credentialGeneration)return;saved=credentials.load();}
+                    if(saved==null)return;
+                    runOnUiThread(()->{synchronized(credentialLock){if(generation!=credentialGeneration||isDestroyed()||!loginOrigin())return;}
+                        web.evaluateJavascript("if(typeof HealthAssistant!=='undefined')HealthAssistant.restoreLogin(JSON.parse("+JSONObject.quote(saved.toString())+"));",null);});
+                }catch(Exception ignored){try{synchronized(credentialLock){if(generation==credentialGeneration)credentials.clear();}}catch(Exception unused){} }
+            });return;
+        }
+        if(!"save".equals(action))return;
+        final String cookie=CookieManager.getInstance().getCookie(WebPolicy.ORIGIN);
+        if(cookie==null)return;
+        // Fixed local script, no password in URL/history, no general-purpose native JS bridge.
+        web.evaluateJavascript("typeof HealthAssistant==='undefined'?null:HealthAssistant.consumeCredentials()",encoded->{
+            if(!loginOrigin()||!cookie.equals(CookieManager.getInstance().getCookie(WebPolicy.ORIGIN)))return;
+            try{
+                JSONObject value=new JSONObject(encoded);
+                final String username=value.getString("username"),password=value.getString("password"),userId=value.getString("userId");
+                io.execute(()->{
+                    HttpsURLConnection connection=null;
+                    try{
+                        connection=(HttpsURLConnection)new URL(WebPolicy.ORIGIN+"/api/auth/me").openConnection();
+                        connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(10000);connection.setReadTimeout(10000);
+                        connection.setRequestProperty("Cookie",cookie);connection.setRequestProperty("Cache-Control","no-store");
+                        if(connection.getResponseCode()!=200)throw new Exception("Login changed");
+                        ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+                        try(InputStream input=connection.getInputStream()){
+                            byte[] buffer=new byte[1024];int count;
+                            while((count=input.read(buffer))!=-1){if(bytes.size()+count>16384)throw new Exception("Unexpected response");bytes.write(buffer,0,count);}
+                        }
+                        JSONObject user=new JSONObject(new String(bytes.toByteArray(),StandardCharsets.UTF_8)).getJSONObject("user");
+                        if(!userId.equals(user.getString("id"))||!username.equals(user.getString("username")))throw new Exception("Account mismatch");
+                        synchronized(credentialLock){
+                            if(generation!=credentialGeneration||!cookie.equals(CookieManager.getInstance().getCookie(WebPolicy.ORIGIN)))return;
+                            credentials.save(username,password);
+                        }
+                        runOnUiThread(()->{if(!isFinishing()&&!isDestroyed())Toast.makeText(this,"账号密码已安全保存在此手机",Toast.LENGTH_SHORT).show();});
+                    }catch(Exception ignored){runOnUiThread(()->{if(!isFinishing()&&!isDestroyed())Toast.makeText(this,"登录成功，但密码未保存，请稍后重试",Toast.LENGTH_LONG).show();});}
+                    finally{if(connection!=null)connection.disconnect();}
+                });
+            }catch(Exception ignored){}
+        });
+    }
+
     private final class Client extends WebViewClient {
         @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             String url = request.getUrl().toString();
@@ -154,6 +215,10 @@ public final class MainActivity extends Activity {
         }
         @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             Uri uri = request.getUrl();
+            if(request.isForMainFrame() && "ecg-credentials".equals(uri.getScheme())){
+                if(loginOrigin() && uri.getQuery()==null && uri.getFragment()==null && (uri.getPath()==null || uri.getPath().isEmpty()))credentialCommand(uri.getHost());
+                return true;
+            }
             if (request.isForMainFrame() && "ecg-report".equals(uri.getScheme()) && "print".equals(uri.getHost())) {
                 if (WebPolicy.trusted(view.getUrl()) && request.hasGesture()) printReport();
                 return true;

@@ -1,5 +1,7 @@
 'use strict';
 function clearAccount() {
+  if(typeof AccountApplications!=='undefined')AccountApplications.clear();
+  if(typeof HealthAssistant!=='undefined')HealthAssistant.clear();
   clearAdmin();
   clearPasswordEditor();
   if(typeof resetDesktop==='function')resetDesktop();
@@ -31,6 +33,7 @@ function showLogin(message='') {
   clearAccount(); $('workspace-shell').hidden=true; $('login-panel').hidden=false;
   $('password').value=''; text('login-error',message);
   $('login-submit').disabled=false;
+  if(typeof HealthAssistant!=='undefined')HealthAssistant.loginShown();
 }
 function enterWorkspace(payload) {
   clearAccount(); state.user=payload?.user || null; state.csrf=payload?.csrf_token || ''; state.ready=true;
@@ -42,6 +45,7 @@ function enterWorkspace(payload) {
   text('account-name',state.user ? state.user.username+' · 我的记录' : '本机工作台');
   $('login-submit').disabled=false;connectionStatus();
   refresh();
+  if(typeof HealthAssistant!=='undefined')HealthAssistant.ready();
 }
 function renderDevice(d) {
   const connection={online:'终端在线',offline:'终端离线',disabled:'设备已停用',unknown:'尚未收到设备状态'};
@@ -60,7 +64,8 @@ async function jsonRequest(path,method,body) {
 }
 $('login-form').onsubmit=async event=>{
   event.preventDefault(); const epoch=state.epoch; $('login-submit').disabled=true; text('login-error','');
-  try {enterWorkspace(await jsonRequest('/api/auth/login','POST',{username:$('username').value,password:$('password').value}));}
+  const values={username:$('username').value,password:$('password').value};
+  try {enterWorkspace(await jsonRequest('/api/auth/login','POST',values));if(typeof HealthAssistant!=='undefined')HealthAssistant.loginSuccess(values);}
   catch(e) {if(epoch===state.epoch)text('login-error',e.message);}
   finally {if(epoch===state.epoch)$('login-submit').disabled=false;}
 };
@@ -243,7 +248,7 @@ $('new-user-form').onsubmit=async event=>{
   event.preventDefault();if(adminView.busy)return;
   const username=$('new-username').value.trim().toLowerCase(),password=$('new-password').value;
   if(!/^[a-z0-9][a-z0-9_-]{2,31}$/.test(username)){text('new-user-error','账号须为 3–32 位字母、数字、横线或下划线，并以字母或数字开头。');return;}
-  if(Array.from(password).length<10 || Array.from(password).length>128){text('new-user-error','密码须为 10–128 个字符。');return;}
+  if(Array.from(password).length<5 || Array.from(password).length>128){text('new-user-error','密码须为 5–128 个字符。');return;}
   if(password!==$('new-password-confirm').value){text('new-user-error','两次初始密码不一致。');return;}
   await adminMutation(()=>jsonRequest('/api/admin/users','POST',{username,password}),
     result=>'已创建普通账号 '+result.username+'。请通过可信渠道交付初始密码；设备采集权限请在设备管理中设置。',clearNewUser,'new-user-error');
@@ -296,6 +301,7 @@ $('password-form').onsubmit=async event=>{
     }
     await jsonRequest('/api/auth/password','POST',payload);
     if(epoch!==state.epoch)return;
+    if(typeof HealthAssistant!=='undefined')HealthAssistant.forget();
     showLogin('密码已修改，请用新密码重新登录。');
   } catch(e) {if(epoch===state.epoch && generation===passwordGeneration)text('password-error',e.message);}
   finally {if(epoch===state.epoch && generation===passwordGeneration)$('password-submit').disabled=false;}
