@@ -1,5 +1,6 @@
 """Administrator-only metadata and maintenance. No backup content route."""
 from typing import Annotated, Literal
+from datetime import date
 from fastapi import Query, HTTPException
 from pydantic import BaseModel, ConfigDict, AwareDatetime
 
@@ -21,12 +22,13 @@ def add_routes(app, store, queue, require_admin, current_user):
                 state: Literal['active', 'complete', 'uploading', 'trashed'] = 'active',
                 owner_id: Annotated[str | None, Query(max_length=96)] = None,
                 device_id: Annotated[str | None, Query(max_length=96)] = None,
-                started_from: AwareDatetime | None = None, started_before: AwareDatetime | None = None):
+                started_from: AwareDatetime | None = None, started_before: AwareDatetime | None = None,
+                registered_day: date | None = None):
         require_admin()
         if started_from and started_before and started_from >= started_before:
             raise HTTPException(422, '开始日期必须早于结束日期')
         return store.records(limit=limit, offset=offset, q=q, state=state, owner_id=owner_id,
-            device_id=device_id, started_from=started_from, started_before=started_before)
+            device_id=device_id, started_from=started_from, started_before=started_before, registered_day=registered_day)
 
     @app.post('/api/admin/database/records/{sid}/trash')
     def trash(sid: str):

@@ -12,6 +12,14 @@ public final class WebPolicy {
                 && (uri.getPort() == -1 || uri.getPort() == 443) && uri.getUserInfo() == null;
         } catch (Exception ignored) { return false; }
     }
+    public static boolean managementPage(String value) {
+        if (!trusted(value)) return false;
+        try {
+            String path = new URI(value).getPath();
+            return "/admin".equals(path) || "/admin/accounts".equals(path)
+                || "/devices".equals(path) || "/database".equals(path);
+        } catch (Exception ignored) { return false; }
+    }
     public static String asset(String path) {
         if ("/".equals(path) || "/index.html".equals(path)) return "web/index.html";
         if ("/devices".equals(path)) return "web/device-manager.html";
