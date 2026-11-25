@@ -35,10 +35,12 @@ var UserExperience = (() => {
     $('report-print').disabled=true;
   }
   function selectionChanged(){
+    if(typeof RecordReview!=='undefined')RecordReview.changed();
     detailTime=null;detailStale=false;clearReport();renderTimes();renderSummary();
     $('record-details').open=!window.matchMedia('(max-width: 720px)').matches;
   }
   function clear(){
+    if(typeof RecordReview!=='undefined')RecordReview.clear();
     listTime=detailTime=null;listStale=detailStale=false;guideInitialized=false;manualBusy=false;pull=null;
     clearReport();$('device-list').replaceChildren();$('latest-record').disabled=true;
     $('first-steps').open=false;$('password').type='password';
@@ -109,6 +111,7 @@ var UserExperience = (() => {
       ['心搏分类 · 终端保存',$('measurement-class').textContent],['心搏分类 · 云端',summary.classification],
       ['心搏与间期分析 · 云端',summary.physiology],['记录备注',s.note || '无']
     ];
+    if(typeof RecordReview!=='undefined')rows.push(...RecordReview.reportRows());
     if(state.analysis?.session_id===s.session_id && state.analysis.analysis_status==='complete'){
       rows.push(['云端分类数量','N '+$('class-N').textContent+' / S '+$('class-S').textContent+' / V '+$('class-V').textContent],
         ['分类版本',$('model-name').textContent],['分类结果时间',$('model-time').textContent]);
@@ -174,5 +177,5 @@ var UserExperience = (() => {
   text('app-version',document.documentElement.dataset.nativeApp==='android'?'Android 1.0.2':'网页版 · 界面 1.0.2');
   $('record-details').open=!window.matchMedia('(max-width: 720px)').matches;
   renderTimes();renderSummary();
-  return {clear,selectionChanged,listUpdated,listFailed,detailUpdated,detailFailed,renderSummary,renderDevices,printDocument,openReport,refreshManually,quickRange};
+  return {clear,clearReport,selectionChanged,listUpdated,listFailed,detailUpdated,detailFailed,renderSummary,renderDevices,printDocument,openReport,refreshManually,quickRange};
 })();

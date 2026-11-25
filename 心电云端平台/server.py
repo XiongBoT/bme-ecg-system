@@ -32,6 +32,8 @@ from device_store import DeviceStore
 from device_routes import add_routes as add_device_routes
 from database_management import DatabaseManager
 from database_routes import add_routes as add_database_routes
+from workflow_store import WorkflowStore, cancel_record_intents
+from workflow_routes import add_routes as add_workflow_routes
 from maintenance_tasks import MaintenanceQueue
 
 ROOT = Path(__file__).resolve().parent
@@ -204,12 +206,15 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     jobs = AnalysisQueue(data, os.getenv('ECG_MODEL', ''))
     database_manager = DatabaseManager(data, lock, lambda: model_service.active_session)
     maintenance = MaintenanceQueue(data)
+    workflow = WorkflowStore(data, jobs, model_service, physiology_service)
     @asynccontextmanager
     async def lifespan(_app):
         if jobs.has_pending(): jobs.start()
         if maintenance.has_pending(): maintenance.start()
+        workflow.start()
         try: yield
         finally:
+            workflow.close()
             maintenance.close()
             jobs.close()
     app = FastAPI(title='心电数据工作台', version='1.1.0', docs_url=None if auth_enabled else '/docs', redoc_url=None, lifespan=lifespan)
@@ -218,6 +223,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     app.state.jobs = jobs
     app.state.database = database_manager
     app.state.maintenance = maintenance
+    app.state.workflow = workflow
 
     @app.middleware('http')
     async def guard(request: Request, call_next):
@@ -543,6 +549,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
                 sample_count=row['sample_count'], real_count=real_count, valid_real_count=valid_real_count)
             meta['source_status'] = payload.source_status
             db.execute('UPDATE sessions SET complete=1, metadata=? WHERE id=?', (json.dumps(meta), session_id))
+            workflow.completed(db, row)
             return summary(db, find_session(db, session_id))
 
     @app.get('/api/sessions')
@@ -601,6 +608,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
                         raise HTTPException(409, '请等待上传和分析完成后再移入回收站')
                     db.execute('INSERT INTO session_details(session_id,trashed_at) VALUES(?,?) ON CONFLICT(session_id) '
                                'DO UPDATE SET trashed_at=excluded.trashed_at', (session_id, now()))
+                    cancel_record_intents(db, session_id)
                     return summary(db, item)
             finally: compute.release()
 
@@ -668,8 +676,10 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
             digest = model_service.digest(metadata, item['complete'], manifest)
             cached = model_service.read(session_id, digest)['analysis_status'] in ('complete','ineligible')
             total = item['sample_count']
+            if total > 1000000: raise HTTPException(409, '心搏分类暂仅支持不超过 100 万采样点的记录')
             db.rollback()
-            try: job = jobs.enqueue(session_id, digest, total, force=force, cached=cached, authorize=authorize)
+            try: job = jobs.enqueue(session_id, digest, total, force=force, cached=cached, authorize=authorize,
+                                   on_enqueued=lambda db, job: workflow.submitted(db, session_id, 'model', job))
             except QueueFull as exc: raise HTTPException(429, str(exc)) from exc
             except ValueError as exc: raise HTTPException(409, str(exc)) from exc
         jobs.start()
@@ -712,7 +722,8 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
             digest = physiology_service.digest(metadata, item['complete'], manifest)
             cached = physiology_service.read(session_id, digest)['analysis_status'] in ('complete','ineligible')
             db.rollback()
-            try: job = jobs.enqueue(session_id, digest, total, force=force, cached=cached, authorize=authorize, kind='physiology')
+            try: job = jobs.enqueue(session_id, digest, total, force=force, cached=cached, authorize=authorize, kind='physiology',
+                                   on_enqueued=lambda db, job: workflow.submitted(db, session_id, 'physiology', job))
             except QueueFull as exc: raise HTTPException(429, str(exc)) from exc
             except ValueError as exc: raise HTTPException(409, str(exc)) from exc
         jobs.start()
@@ -797,7 +808,17 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
         return Response(out.getvalue().encode('utf-8-sig'), media_type='text/csv; charset=utf-8',
                         headers={'Content-Disposition': f'attachment; filename="{session_id}.csv"'})
 
+    add_workflow_routes(app, workflow, identity.get, find_session, require_admin)
+
     app.mount('/assets', StaticFiles(directory=ROOT / 'web'), name='assets')
+
+    @app.get('/tasks')
+    def tasks_page():
+        return FileResponse(ROOT / 'web' / 'tasks.html')
+
+    @app.get('/operations')
+    def operations_page():
+        return FileResponse(ROOT / 'web' / 'operations.html')
 
     @app.get('/downloads/{filename}')
     def desktop_download(filename: str):

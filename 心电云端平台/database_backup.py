@@ -291,6 +291,10 @@ def restore_backup(archive, destination):
             db.execute('DELETE FROM device_keys')
             db.execute("UPDATE analysis_jobs SET status='failed',stage='备份恢复，请重新分析',error='派生缓存不在备份范围内'")
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if 'workflow_intents' in tables:
+                db.execute("UPDATE workflow_intents SET status='cancelled',message='备份恢复，需由本人重新提交分析'")
+            if 'record_reviews' in tables:
+                db.execute("UPDATE record_reviews SET context='restored'")
             if 'management_jobs' in tables:
                 db.execute("UPDATE management_jobs SET status='interrupted',stage='从备份恢复，需重新执行',error='原运行环境已改变'")
         # The temporary child is renamed, never merged with an existing directory.
