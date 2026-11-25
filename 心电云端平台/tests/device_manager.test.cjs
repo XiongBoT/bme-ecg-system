@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 function harness(){
  const elements=new Map(),make=()=>({textContent:'',value:'',hidden:false,disabled:false,children:[],listeners:{},append(...v){this.children.push(...v)},replaceChildren(...v){this.children=[...v]},reset(){},showModal(){this.open=true},close(){this.open=false;this.listeners.close?.()},addEventListener(k,fn){this.listeners[k]=fn},setAttribute(){},removeAttribute(){}});
  const el=id=>{if(!elements.has(id))elements.set(id,make());return elements.get(id)};
- const ctx=vm.createContext({document:{getElementById:el,createElement:make,querySelectorAll:()=>[],body:{dataset:{}},addEventListener(){}},window:{addEventListener(){},location:{pathname:'/devices',search:''},history:{replaceState(){}}},setInterval(){},AbortSignal,URL,URLSearchParams,Blob,setTimeout,console,fetch:async()=>{},confirm:()=>true});
+ const ctx=vm.createContext({document:{getElementById:el,createElement:make,createElementNS:make,querySelectorAll:()=>[],body:{dataset:{}},addEventListener(){}},window:{addEventListener(){},location:{pathname:'/devices',search:''},history:{replaceState(){}}},setInterval(){},AbortSignal,URL,URLSearchParams,Blob,setTimeout,console,fetch:async()=>{},confirm:()=>true});
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/admin-common.js'),'utf8'),ctx);
  let source=fs.readFileSync(path.join(__dirname,'../web/device-manager.js'),'utf8');source=source.replace(/initializeManager\(\);\s*$/,'');vm.runInContext(source,ctx);
  return {ctx,el,state:vm.runInContext('manager',ctx)};

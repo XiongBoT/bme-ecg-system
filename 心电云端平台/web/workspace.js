@@ -10,6 +10,8 @@ function clearAccount() {
   physiologyUI?.clear();
   state.epoch++; state.listEpoch++; state.generation++; state.analysisGeneration++;
   state.ready=false; state.user=null; state.csrf=''; state.sessions=[]; state.selected=null;
+  $('nav-tasks').hidden=$('account-admin-group').hidden=$('account-work-group').hidden=$('account-security-group').hidden=true;
+  text('nav-username','');text('account-role','');
   state.wave=null; state.analysis=null; state.analyzing=null; state.views.clear(); state.page=0;
   state.busy=false; state.total=0; state.filters={}; state.analysisKey=''; state.tableKey=''; state.listKey='';
   detailFeedback(); $('detail-retry').disabled=false;
@@ -44,10 +46,15 @@ function enterWorkspace(payload) {
   $('manage-database').hidden=!state.user?.is_admin;
   $('manage-operations').hidden=!state.user?.is_admin;
   $('task-center').hidden=$('records-tasks').hidden=!state.user;
+  $('nav-tasks').hidden=$('account-work-group').hidden=!state.user;
+  $('account-admin-group').hidden=!state.user?.is_admin;
+  $('account-security-group').hidden=!state.auth;
   const linkedRecord=new URLSearchParams(globalThis.location?.search || '').get('record');
   if(linkedRecord && /^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(linkedRecord)){state.filters.q=linkedRecord;$('query').value=linkedRecord;}
   $('manage-console').hidden=!state.user?.is_admin;
-  text('account-name',state.user ? state.user.username+' · 我的记录' : '本机工作台');
+  text('account-name',state.user ? state.user.username : '本机工作台');
+  text('nav-username',state.user?.username || '本机工作台');
+  text('account-role',state.user?.is_admin ? '管理员账号' : state.user ? '个人账号' : '本机联调');
   $('login-submit').disabled=false;connectionStatus();
   refresh();
   if(typeof HealthAssistant!=='undefined')HealthAssistant.ready();

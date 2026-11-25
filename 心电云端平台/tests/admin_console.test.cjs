@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 function harness(){
  const elements=new Map(),node=()=>({textContent:'',hidden:false,children:[],attributes:{},append(...v){this.children.push(...v)},replaceChildren(...v){this.children=v},setAttribute(k,v){this.attributes[k]=v},removeAttribute(k){delete this.attributes[k]},classList:{add(){}},addEventListener(){}});
  const el=id=>{if(!elements.has(id))elements.set(id,node());return elements.get(id)};
- const context=vm.createContext({document:{getElementById:el,createElement:node,querySelector:()=>null,body:{dataset:{}},hidden:false,addEventListener(){}},window:{location:{pathname:'/admin',search:''},addEventListener(){},history:{replaceState(){}}},URLSearchParams,AbortSignal,setInterval(){},console,fetch:async()=>{}});
+ const context=vm.createContext({document:{getElementById:el,createElement:node,createElementNS:node,querySelector:()=>null,body:{dataset:{}},hidden:false,addEventListener(){}},window:{location:{pathname:'/admin',search:''},addEventListener(){},history:{replaceState(){}}},URLSearchParams,AbortSignal,setInterval(){},console,fetch:async()=>{}});
  const file=path.join(__dirname,'../web/admin-common.js');assert.ok(fs.existsSync(file),'shared admin session missing');
  vm.runInContext(fs.readFileSync(file,'utf8'),context);
  return {context,ui:context.window.AdminUI,el};

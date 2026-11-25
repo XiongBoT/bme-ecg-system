@@ -12,9 +12,9 @@ function harness() {
       getBoundingClientRect(){return {width:0}},append(...children){this.children.push(...children);}});
     return elements.get(id);
   }
-  const media={narrow:{matches:true,addEventListener(n,fn){this.changed=fn;}},standalone:{matches:false,addEventListener(){}}};
+  const media={narrow:{matches:true,addEventListener(n,fn){this.changed=fn;}},stacked:{matches:false,addEventListener(n,fn){this.changed=fn;}},standalone:{matches:false,addEventListener(){}}};
   const window={scrollY:0,scrollTo({top}){this.scrollY=top;},navigator:{standalone:false},addEventListener(){},
-    matchMedia:q=>q.includes('max-width')?media.narrow:media.standalone};
+    matchMedia:q=>q.includes('1050px')?media.stacked:q.includes('max-width')?media.narrow:media.standalone};
   const context=vm.createContext({document,window,requestAnimationFrame:fn=>fn(),location:{href:''},
     sessionStorage:{getItem:()=>'',removeItem(){},setItem(){}},ResizeObserver:class{observe(){}},
     URLSearchParams,AbortSignal,console,confirm:()=>true,fetch:async()=>({ok:false}),setTimeout,clearTimeout,setInterval(){}});
@@ -328,6 +328,65 @@ test('desktop resize restores detail refresh and opens the filter form',()=>{
   h.context.loadWave=h.context.loadAnalysis=()=>details++;
   h.media.narrow.matches=false;h.media.narrow.changed();
   assert.equal(h.context.MobileUI.needsDetail(),true);assert.equal(details,2);assert.equal(h.element('filter-panel').open,true);
+});
+
+test('desktop navigation shares selected state and preserves record and unfinished note',()=>{
+  const h=harness();h.media.narrow.matches=false;h.loadMobile();h.state.ready=true;h.state.selected='kept';
+  h.element('review-note').value='unfinished';let details=0,refreshes=0;
+  h.context.loadWave=h.context.loadAnalysis=()=>details++;h.context.refresh=()=>refreshes++;
+  h.element('desktop-nav-account').onclick();
+  assert.equal(h.element('workspace-shell').dataset.mobileView,'account');
+  assert.equal(h.element('desktop-nav-account').attributes['aria-current'],'page');
+  assert.equal(h.element('nav-account').attributes['aria-current'],'page');
+  assert.equal(h.context.MobileUI.needsDetail(),false);
+  assert.equal(h.document.activeElement,h.element('account-heading'));
+  h.element('nav-device').onclick();
+  assert.equal(h.element('workspace-shell').dataset.mobileView,'devices');assert.equal(refreshes,1);
+  assert.equal(h.element('desktop-nav-account').attributes['aria-current'],undefined);
+  h.element('desktop-nav-records').onclick();
+  assert.equal(h.context.MobileUI.needsDetail(),true);assert.equal(details,2);
+  assert.equal(h.state.selected,'kept');assert.equal(h.element('review-note').value,'unfinished');
+  assert.equal(h.element('desktop-nav-records').attributes['aria-current'],'page');
+});
+
+test('resizing an account view keeps it selected without fetching hidden details',()=>{
+  const h=harness();h.loadMobile();h.state.ready=true;h.state.selected='kept';let details=0;
+  h.context.loadWave=h.context.loadAnalysis=()=>details++;
+  h.element('nav-account').onclick();h.media.narrow.matches=false;h.media.narrow.changed();
+  assert.equal(h.context.MobileUI.needsDetail(),false);assert.equal(details,0);
+  assert.equal(h.element('desktop-nav-account').attributes['aria-current'],'page');
+  h.media.narrow.matches=true;h.media.narrow.changed();
+  assert.equal(h.element('nav-account').attributes['aria-current'],'page');assert.equal(h.state.selected,'kept');
+});
+
+test('new navigation groups follow current account and clear on logout',()=>{
+  const h=harness();h.context.refresh=()=>{};h.loadMobile();h.state.auth=true;
+  h.context.enterWorkspace({user:{id:'a',username:'Admin',is_admin:true}});
+  assert.equal(h.element('account-admin-group').hidden,false);assert.equal(h.element('nav-tasks').hidden,false);
+  h.element('desktop-nav-account').onclick();
+  h.context.enterWorkspace({user:{id:'b',username:'Member',is_admin:false}});
+  assert.equal(h.element('account-admin-group').hidden,true);assert.equal(h.element('nav-tasks').hidden,false);
+  assert.equal(h.element('workspace-shell').dataset.mobileView,'records');
+  assert.equal(h.element('nav-username').textContent,'Member');
+  h.context.showLogin();assert.equal(h.element('nav-tasks').hidden,true);
+  assert.equal(h.element('nav-username').textContent,'');
+});
+
+test('tablet selection opens visible results and return preserves the chosen record',()=>{
+  const h=harness();h.media.narrow.matches=false;h.media.stacked.matches=true;h.loadMobile();
+  h.state.ready=true;h.state.selected='chosen';let details=0;
+  h.context.loadWave=h.context.loadAnalysis=()=>details++;
+  assert.equal(h.context.MobileUI.needsDetail(),false);
+  assert.equal(h.context.MobileUI.openResult(),true);
+  assert.equal(h.element('workspace-shell').dataset.mobileView,'results');
+  assert.equal(h.document.activeElement,h.element('results-heading'));assert.equal(details,2);
+  h.element('desktop-nav-account').onclick();h.element('desktop-nav-records').onclick();
+  assert.equal(h.element('workspace-shell').dataset.mobileView,'records');assert.equal(h.state.selected,'chosen');
+  assert.equal(h.context.MobileUI.needsDetail(),false);
+  h.context.MobileUI.openResult();h.media.stacked.matches=false;h.media.stacked.changed();
+  assert.equal(h.context.MobileUI.needsDetail(),true);assert.equal(h.element('nav-records').attributes['aria-current'],'page');
+  h.media.narrow.matches=true;h.media.narrow.changed();
+  assert.equal(h.element('workspace-shell').dataset.mobileView,'results');assert.equal(h.state.selected,'chosen');
 });
 test('Android export passes only record and user identity to the system save flow',async()=>{
   const h=harness();h.document.documentElement.dataset.nativeApp='android';h.state.selected='session_1';h.state.user={id:'a'.repeat(32)};
