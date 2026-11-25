@@ -29,4 +29,4 @@
 
 算法研究另有 `Algorithm evaluation tests`：安装云端 `requirements-research.txt` 后运行 `tests/*benchmark*.py`，检查同输入、匹配边界、分类分母、断流及报告一致性，不下载公开心电数据库。全量数据实验按[研究工具](../心电云端平台/research/README.md)独立执行，不在每次 CI 中重复长时评测。
 
-修改现行三份说明或公开报告 JSON 后，执行 `python tools/sync_docs.py --write`。历史 `docs/archive/` 原文不参与生成。链接检查支持行内/引用链接、Markdown 标题和 HTML 锚点，忽略代码示例中的链接，不访问外网；文件名大小写按 Git 跟踪清单核对。生成文本中的在线链接用于精简离线包查阅，文档原文仍采用仓库相对链接。
+每个模块有快速开始、使用说明、故障排查三份现行 Markdown。修改这些说明或公开报告 JSON 后，执行 `python tools/sync_docs.py --write`。生成后先将新增文档纳入 Git，再运行链接与同步检查。仅改文档时优先运行仓库工具、策略、链接及生成同步检查；仓库 PR 的完整 Quality gate 仍按 CI 配置执行。历史 `docs/archive/` 原文不参与生成。链接检查支持行内/引用链接、Markdown 标题和 HTML 锚点，忽略代码示例中的链接，不访问外网；文件名大小写按 Git 跟踪清单核对。生成文本中的在线链接用于精简离线包查阅，文档原文仍采用仓库相对链接。
