@@ -123,6 +123,14 @@ class HealthAssistantTests(unittest.TestCase):
         admin=next(d for d in self.ad.get('/api/admin/devices').json()['devices'] if d['device_id']=='pi-health')
         self.assertEqual(admin['device_info']['model'],'Raspberry Pi 2');self.assertEqual(admin['free_bytes'],1073741824)
         self.assertEqual(admin['connection'],'online');self.assertIn('created_at',admin)
+        console=self.ad.get('/api/admin/console/devices/pi-health').json()['device']
+        self.assertEqual(console['device_info']['model'],'Raspberry Pi 2')
+        self.assertEqual(console['free_bytes'],1073741824)
+        self.assertTrue(console['remote_ready'])
+        with closing(sqlite3.connect(Path(self.temp.name)/'cloud.sqlite')) as db,db:
+            db.execute('UPDATE device_heartbeats SET seen=?',(time.time()-60,))
+        self.assertFalse(self.ad.get('/api/admin/console/devices/pi-health').json()['device']['remote_ready'])
+        self.assertEqual(self.a.get('/api/admin/console/devices/pi-health').status_code,403)
         ordinary=self.a.get('/api/devices').json()['devices']
         self.assertTrue(all('device_info' not in d for d in ordinary))
 

@@ -73,7 +73,7 @@ class AnalysisService:
 
     def read(self, sid, digest):
         if not self.enabled:
-            return self.response(sid, 'not_configured', '未接入模型')
+            return self.response(sid, 'not_configured', '未接入模型', digest)
         if self.model_status != 'ready':
             return self.response(sid, 'failed', '模型加载失败：' + str(self.error), digest)
         with self.state_lock:

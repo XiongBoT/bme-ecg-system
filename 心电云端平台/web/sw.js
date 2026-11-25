@@ -26,7 +26,7 @@ self.addEventListener('message',event=>{
 });
 self.addEventListener('fetch',event=>{
   const request=event.request,url=new URL(request.url);
-  if(request.method!=='GET'||url.origin!==self.location.origin||request.mode!=='navigate'||!['/','/devices'].includes(url.pathname))return;
+  if(request.method!=='GET'||url.origin!==self.location.origin||request.mode!=='navigate'||!['/','/devices','/admin','/admin/accounts','/database'].includes(url.pathname))return;
   event.respondWith((async()=>{
     try {
       const response=await fetch(request);

@@ -16,11 +16,13 @@ ROOT=Path(__file__).resolve().parent
 PROJECT=ROOT.parent
 WEB=PROJECT/'web'
 ASSETS=('applications.js','health.js','health_core.js','health.css','index.html','app.js','workspace.js','devices.js','measurement.js','mobile.js',
+        'workflow_core.js','review.js','tasks.html','operations.html','workflow-page.js','workflow.css',
         'physiology.js','physiology.css','experience_core.js','experience.js','experience.css',
         'connection.js','desktop_core.js','desktop.js','desktop.css',
         'style.css','workspace.css','measurement.css','mobile.css','pwa.css',
         'device-manager.html','device-manager.js','device-manager.css',
         'database-manager.html','database-manager.js','database-manager.css',
+        'admin-common.js','admin.css',
         'icons/icon-192.png','icons/icon-512.png','icons/icon-maskable.png','icons/apple-touch-icon.png')
 
 def prepare_assets(destination: Path):

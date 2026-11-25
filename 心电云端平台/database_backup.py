@@ -294,6 +294,10 @@ def restore_backup(archive, destination):
             if 'measurement_requests' in tables:
                 db.execute("UPDATE measurement_requests SET status='failed',message='从备份恢复，请重新确认并发起测量' "
                            "WHERE status IN ('queued','accepted','recording','uploading')")
+            if 'workflow_intents' in tables:
+                db.execute("UPDATE workflow_intents SET status='cancelled',message='备份恢复，需由本人重新提交分析'")
+            if 'record_reviews' in tables:
+                db.execute("UPDATE record_reviews SET context='restored'")
             if 'management_jobs' in tables:
                 db.execute("UPDATE management_jobs SET status='interrupted',stage='从备份恢复，需重新执行',error='原运行环境已改变'")
         # The temporary child is renamed, never merged with an existing directory.

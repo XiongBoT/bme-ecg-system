@@ -1,6 +1,6 @@
 """Bounded administrative metadata; never exposes waveforms or credentials."""
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 from pathlib import Path
 import re
@@ -12,6 +12,7 @@ import uuid
 
 from fastapi import HTTPException
 from analysis_tasks import FileLock
+from workflow_store import cancel_record_intents
 
 SESSION_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,95}\Z')
 
@@ -82,7 +83,7 @@ class DatabaseManager:
                 'backup_policy': 'server_only', 'measured_at': time.time()}
 
     def records(self, *, limit=25, offset=0, q='', state='active', owner_id=None, device_id=None,
-                started_from=None, started_before=None):
+                started_from=None, started_before=None, registered_day=None):
         clauses, params = [], []
         if state == 'trashed': clauses.append('d.trashed_at IS NOT NULL')
         else:
@@ -94,6 +95,12 @@ class DatabaseManager:
         if owner_id == 'unassigned': clauses.append('s.owner_id IS NULL')
         elif owner_id: clauses.append('s.owner_id=?'); params.append(owner_id)
         if device_id: clauses.append('s.ingest_device_id=?'); params.append(device_id)
+        if registered_day:
+            if registered_day.isoformat() == '9999-12-31':
+                raise HTTPException(422, '登记日期须早于 9999-12-31')
+            start = datetime.combine(registered_day, datetime.min.time(), timezone(timedelta(hours=8)))
+            clauses.append('julianday(s.created_at)>=julianday(?) AND julianday(s.created_at)<julianday(?)')
+            params.extend([start.isoformat(), (start + timedelta(days=1)).isoformat()])
         for value, op in ((started_from, '>='), (started_before, '<')):
             if value:
                 clauses.append("julianday(json_extract(s.metadata,'$.started_utc'))" + op + 'julianday(?)')
@@ -124,6 +131,7 @@ class DatabaseManager:
                     stamp = datetime.now(timezone.utc).isoformat() if trashed else None
                     db.execute('INSERT INTO session_details(session_id,trashed_at) VALUES(?,?) '
                         'ON CONFLICT(session_id) DO UPDATE SET trashed_at=excluded.trashed_at', (sid, stamp))
+                    if trashed: cancel_record_intents(db, sid)
                     audit(db, actor, 'trash' if trashed else 'restore', sid)
                     return {'ok': True, 'session_id': sid, 'trashed_at': stamp}
             finally: compute.release()

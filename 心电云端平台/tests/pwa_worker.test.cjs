@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 function harness(){
  const handlers={},stored=new Map(),deleted=[];
- const cache={put:async(k,v)=>stored.set(typeof k==='string'?k:k.url,v),match:async k=>stored.get(k)};
+ const cache={put:async(k,v)=>stored.set(typeof k==='string'?k:k.url,v),match:async k=>stored.get(k)?.clone()};
  const ctx=vm.createContext({URL,Request,Response,Promise,console,
   self:{location:{origin:'https://ecg.example'},addEventListener:(n,fn)=>handlers[n]=fn,
    clients:{claim:async()=>{}},skipWaiting:async()=>{ctx.skipped=true;}},
@@ -43,6 +43,15 @@ test('API errors are never replaced with an offline HTML success',async()=>{
  const h=harness();h.ctx.fetch=async()=>new Response('no access',{status:401});
  const r=await h.fetchEvent({url:'https://ecg.example/',method:'GET',mode:'navigate'});
  assert.equal(r.status,401);
+});
+
+test('admin navigation has an anonymous fallback and never caches management pages',async()=>{
+ const h=harness();await h.event('install');h.ctx.fetch=async()=>{throw Error('offline');};
+ for(const path of ['/admin','/admin/accounts?selected=demo','/database?owner_id=demo']){
+  const r=await h.fetchEvent({url:'https://ecg.example'+path,method:'GET',mode:'navigate'});
+  assert.ok(r);assert.equal(await r.text(),'public fixture');assert.equal(h.stored.has(path),false);
+ }
+ assert.equal(h.fetchEvent({url:'https://ecg.example/api/admin/console/overview',method:'GET',mode:'navigate'}),undefined);
 });
 test('missing fallback and server outage are reported without inventing a successful page',async()=>{
  const h=harness();h.ctx.fetch=async()=>new Response('down',{status:503});

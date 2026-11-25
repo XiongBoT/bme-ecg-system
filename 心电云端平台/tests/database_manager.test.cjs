@@ -3,7 +3,7 @@ function harness(){
  const file=path.join(__dirname,'../web/database-manager.js');assert.ok(fs.existsSync(file),'database manager UI missing');
  const elements=new Map(),make=()=>({textContent:'',value:'',hidden:false,disabled:false,children:[],listeners:{},append(...v){this.children.push(...v)},replaceChildren(...v){this.children=[...v]},reset(){},addEventListener(k,fn){this.listeners[k]=fn},setAttribute(){}});
  const el=id=>{if(!elements.has(id))elements.set(id,make());return elements.get(id)};
- const ctx=vm.createContext({document:{getElementById:el,createElement:make,hidden:false,addEventListener(){}},window:{addEventListener(){}},setInterval(){},AbortSignal,URLSearchParams,Date,console,fetch:async()=>{},confirm:()=>true});
+ const ctx=vm.createContext({document:{getElementById:el,createElement:make,hidden:false,addEventListener(){}},window:{addEventListener(){},location:{search:'',hash:''},history:{replaceState(){}}},setInterval(){},AbortSignal,URLSearchParams,Date,console,fetch:async()=>{},confirm:()=>true});
  vm.runInContext(fs.readFileSync(file,'utf8').replace(/initializeDatabase\(\);\s*$/,''),ctx);
  return {ctx,el,state:vm.runInContext('databaseUI',ctx)};
 }
@@ -24,6 +24,11 @@ test('permission error hides every management section',async()=>{
  const h=harness();h.state.user={id:'one'};
  h.ctx.fetch=async()=>({headers:{get:()=>null},ok:false,status:403,json:async()=>({detail:'需要管理员账号'})});
  await assert.rejects(h.ctx.dbRequest('/api/admin/database'));assert.equal(h.el('database-content').hidden,true);
+});
+
+test('database restores encoded cross-page filters and cloud registration day',()=>{
+ const h=harness();h.ctx.window.location.search='?device_id=lab-one&owner_id=alice&registered_day=2026-11-25&state=uploading&offset=25';
+ h.ctx.restoreDatabaseFilters();const p=h.ctx.recordParams();assert.equal(p.get('device_id'),'lab-one');assert.equal(p.get('owner_id'),'alice');assert.equal(p.get('registered_day'),'2026-11-25');assert.equal(p.get('state'),'uploading');assert.equal(p.get('offset'),'25');
 });
 test('older filter response cannot replace the latest record list',async()=>{
  const h=harness();h.state.user={id:'one'};h.el('db-state').value='active';let resolve,calls=0;

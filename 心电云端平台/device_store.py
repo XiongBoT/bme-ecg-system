@@ -110,11 +110,15 @@ class DeviceStore:
             db.executemany('INSERT INTO device_users VALUES(?,?)',[(did,u) for u in users])
             return dict(device=self._public(db,self._get(db,did),True),credentials=self._key(db,did))
 
-    def update(self,did,*,name=None,active=None,user_ids=None):
+    def update(self,did,*,name=None,active=None,user_ids=None,expected_user_ids=None,expected_legacy_shared=None):
         with closing(self.connect()) as db,db:
-            db.execute('BEGIN IMMEDIATE');self._get(db,did)
+            db.execute('BEGIN IMMEDIATE');row=self._get(db,did)
             if user_ids is not None:
-                users=self._users(db,user_ids)
+                current={r[0] for r in db.execute('SELECT user_id FROM device_users WHERE device_id=?',(did,))}
+                if (expected_user_ids is not None and current!=set(expected_user_ids)) or (expected_legacy_shared is not None and bool(row['legacy_shared'])!=expected_legacy_shared):
+                    raise HTTPException(409,'设备授权已被其他操作更新，请刷新设备后重新修改；本次未保存')
+                users=sorted(set(user_ids))
+                self._users(db,set(users)-current)
                 db.execute('DELETE FROM device_users WHERE device_id=?',(did,))
                 db.executemany('INSERT INTO device_users VALUES(?,?)',[(did,u) for u in users])
                 db.execute('UPDATE devices SET legacy_shared=0 WHERE id=?',(did,))

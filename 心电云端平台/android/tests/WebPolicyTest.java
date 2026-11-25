@@ -12,6 +12,8 @@ public final class WebPolicyTest {
         check(WebPolicy.asset("/api/sessions")==null);
         for(String path:new String[]{"/assets/../secret","/assets/%2e%2e/secret","/assets//private","/assets/evil\\file"})check(WebPolicy.asset(path)==null);
         check(WebPolicy.sessionId("session_2026-11"));
+        for(String path:new String[]{"/admin", "/admin/accounts?selected=demo", "/devices?account=demo&selected=pi-one", "/database#db-maintenance-section"})check(WebPolicy.managementPage(WebPolicy.ORIGIN+path));
+        for(String uri:new String[]{WebPolicy.ORIGIN+"/", WebPolicy.ORIGIN+"/administer", WebPolicy.ORIGIN+"/api/admin/users", "https://evil.test/admin", "http://62.234.150.104/admin", null})check(!WebPolicy.managementPage(uri));
         for(String sid:new String[]{"", "../one", "a/b", "a?user=other",null})check(!WebPolicy.sessionId(sid));
         System.out.println("WebPolicy: "+checked+" cases passed");
     }
