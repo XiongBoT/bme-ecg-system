@@ -23,7 +23,7 @@ test('management navigation keeps daily destinations reachable beside administra
 });
 
 test('management sections identify only the current page',()=>{
- for(const [section,href] of [['overview','/admin'],['accounts','/admin/accounts'],['devices','/devices'],['records','/database']]){
+ for(const [section,href] of [['overview','/admin'],['accounts','/admin/accounts'],['devices','/devices'],['records','#db-records-section']]){
   const h=admin(section);
   assert.deepEqual(h.current().map(link=>[link.href,link.attributes['aria-current']]),[[href,'page']]);
  }
@@ -31,11 +31,22 @@ test('management sections identify only the current page',()=>{
 
 test('database hash navigation follows maintenance, activity, and return to records',()=>{
  const h=admin('records','#db-maintenance-section');
- assert.deepEqual(h.current().map(link=>[link.href,link.attributes['aria-current']]),[['/database#db-maintenance-section','location']]);
+ assert.deepEqual(h.current().map(link=>[link.href,link.attributes['aria-current']]),[['#db-maintenance-section','location']]);
  h.hash('#db-activity-section');
- assert.deepEqual(h.current().map(link=>[link.href,link.attributes['aria-current']]),[['/database#db-activity-section','location']]);
+ assert.deepEqual(h.current().map(link=>[link.href,link.attributes['aria-current']]),[['#db-activity-section','location']]);
  for(const hash of ['#db-records-section','#unrecognized','']){
-  h.hash(hash);assert.deepEqual(h.current().map(link=>link.href),['/database']);
+  h.hash(hash);assert.deepEqual(h.current().map(link=>link.href),['#db-records-section']);
+ }
+});
+
+test('database section navigation keeps the current document and filters to preserve unsaved forms',()=>{
+ const h=admin('records'),current=new URL('https://example.test/database?state=active&offset=25&user=owner');
+ for(const hash of ['#db-records-section','#db-maintenance-section','#db-activity-section']){
+  const link=h.links().find(item=>item.href.endsWith(hash));
+  assert.ok(link,'section destination must exist: '+hash);
+  const destination=new URL(link.href,current);
+  assert.equal(destination.origin+destination.pathname+destination.search,current.origin+current.pathname+current.search);
+  assert.equal(destination.hash,hash);
  }
 });
 
