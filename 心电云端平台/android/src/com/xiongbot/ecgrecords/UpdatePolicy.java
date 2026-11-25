@@ -19,7 +19,8 @@ final class UpdatePolicy {
         if (!(version instanceof String) || !(url instanceof String) || !(notes instanceof String)) return null;
         if (!integer(code) || ((Number)code).longValue() <= 0 || ((Number)code).longValue() > Integer.MAX_VALUE) return null;
         String name = (String)version, address = (String)url, description = (String)notes;
-        if (!name.matches("(?:0|[1-9][0-9]{0,8})\\.(?:0|[1-9][0-9]{0,8})\\.(?:0|[1-9][0-9]{0,8})")) return null;
+        if (!name.matches("(?:0|[1-9][0-9]{0,4})\\.(?:0|[1-9][0-9]{0,4})\\.(?:0|[1-9][0-9]{0,4})")) return null;
+        for (String component : name.split("\\.")) if (Integer.parseInt(component) > 65535) return null;
         if (description.length() > 1000) return null;
         for (int i = 0; i < description.length(); i++) {
             char c = description.charAt(i);

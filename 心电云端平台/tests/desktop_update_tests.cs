@@ -51,6 +51,29 @@ internal static class DesktopUpdateTests
         public override void SetLength(long value) {throw new NotSupportedException();}
         public override void Write(byte[] buffer,int offset,int count) {throw new NotSupportedException();}
     }
+    // Return valid data only after the deadline has fired, without throwing cancellation.
+    private sealed class LateSuccessStream : MemoryStream
+    {
+        private bool waited;
+        internal LateSuccessStream(string body) : base(Encoding.UTF8.GetBytes(body)) { }
+        public override Task<int> ReadAsync(byte[] buffer,int offset,int count,CancellationToken token)
+        {
+            if(!waited) {waited=true;Check(token.WaitHandle.WaitOne(2000),"test deadline fired before late successful read");}
+            return Task.FromResult(Read(buffer,offset,count));
+        }
+    }
+    private sealed class DisposalStream : MemoryStream
+    {
+        internal volatile bool WasDisposed;
+        protected override void Dispose(bool disposing) {WasDisposed=true;base.Dispose(disposing);}
+    }
+    private sealed class DeferredStreamContent : HttpContent
+    {
+        internal readonly TaskCompletionSource<Stream> Pending=new TaskCompletionSource<Stream>();
+        protected override Task<Stream> CreateContentReadStreamAsync() {return Pending.Task;}
+        protected override bool TryComputeLength(out long length) {length=0;return false;}
+        protected override Task SerializeToStreamAsync(Stream stream,TransportContext context) {throw new NotSupportedException();}
+    }
     private sealed class LargeStream : Stream
     {
         internal int BytesRead;
@@ -84,8 +107,10 @@ internal static class DesktopUpdateTests
         Check(Parse("1.10.0","1.9.0.0").Kind==UpdateKind.NewVersion,"numeric version ordering");
         Check(Parse("1.2.0","1.2.0.0").Kind==UpdateKind.Current,"omitted revision equals zero");
         Check(Parse("1.1.0","1.2.0.0").Kind==UpdateKind.Current,"older releases never downgrade");
-        Check(Parse("1.2.0.1","1.2.0.0").Kind==UpdateKind.NewVersion,"numeric revision ordering");
-        foreach(string version in new[]{"1.2.0-beta","1","01.2.0","1.2.-1","1.2.2147483648","1.2.0.0.0"," 1.2.0"})
+        Check(Parse("1.2.0","1.2.0.1").Kind==UpdateKind.Current,"installed assembly revision remains supported");
+        Check(Parse("65535.65535.65535","1.2.0.0").Kind==UpdateKind.NewVersion,"maximum release components accepted");
+        Check(Parse("0.0.0","1.2.0.0").Kind==UpdateKind.Current,"zero release components accepted");
+        foreach(string version in new[]{"1.2","1.2.0.1","65536.2.0","1.65536.0","1.2.65536","1.2.0-beta","1","01.2.0","1.02.0","1.2.00","1.2.-1","1.2.2147483648","1.2.0.0.0"," 1.2.0"})
             Check(Parse(version,"1.1.0").Kind==UpdateKind.Failed,"invalid version: "+version);
         foreach(string body in new[]{"{}","null","[]","{","{\"schema\":2,\"windows\":null}","{\"schema\":\"1\",\"windows\":null}","{\"schema\":1}","{\"schema\":1,\"windows\":{\"version\":\"1.3.0\"}}"})
             Check(UpdateMetadata.Parse(body,new Version(1,2,0)).Kind==UpdateKind.Failed,"invalid update metadata");
@@ -126,6 +151,16 @@ internal static class DesktopUpdateTests
         handler=new Handler {Respond=token=>Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StreamContent(new SlowStream())})};
         elapsed.Restart();
         Check(Fetch(handler,60,CancellationToken.None).Kind==UpdateKind.Failed && elapsed.ElapsedMilliseconds<2000,"body timeout bounded");
+        handler=new Handler {Respond=token=>Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){
+            Content=new StreamContent(new LateSuccessStream(Manifest("1.3.0",Release+"1.3.0","late release")))
+        })};
+        Check(Fetch(handler,20,CancellationToken.None).Kind==UpdateKind.Failed,"successful body arriving after deadline is rejected");
+        var deferredContent=new DeferredStreamContent();
+        handler=new Handler {Respond=token=>Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=deferredContent})};
+        Check(Fetch(handler,20,CancellationToken.None).Kind==UpdateKind.Failed,"deadline cancels pending body stream acquisition");
+        var lateResource=new DisposalStream();
+        deferredContent.Pending.SetResult(lateResource);
+        Check(SpinWait.SpinUntil(()=>lateResource.WasDisposed,2000),"late stream acquired after cancellation is disposed");
         using(var cancelled=new CancellationTokenSource())
         {
             cancelled.CancelAfter(50);

@@ -51,8 +51,9 @@ internal sealed class UpdateMetadata
                 !release.TryGetValue("url",out rawUrl) || !release.TryGetValue("notes",out rawNotes)) return Failed();
             string version=rawVersion as string,url=rawUrl as string,notes=rawNotes as string;
             Version latest;
-            if(version==null || version.Length>43 || !Regex.IsMatch(version,@"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)){0,2}$") ||
-                !Version.TryParse(version,out latest) || notes==null || !IsOfficialUrl(url,version)) return Failed();
+            if(version==null || version.Length>17 || !Regex.IsMatch(version,@"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z") ||
+                !Version.TryParse(version,out latest) || latest.Major>65535 || latest.Minor>65535 || latest.Build>65535 ||
+                notes==null || !IsOfficialUrl(url,version)) return Failed();
             var metadata=new UpdateMetadata(version,new Uri(url),PlainNotes(notes));
             return new UpdateResult(Normalized(latest)>Normalized(installed)?UpdateKind.NewVersion:UpdateKind.Current,metadata);
         }
@@ -109,8 +110,10 @@ internal static class UpdateProbe
                             if(body.Length+count>16384) return new UpdateResult(UpdateKind.Failed);
                             body.Write(buffer,0,count);
                         }
-                        token.ThrowIfCancellationRequested();
-                        return UpdateMetadata.Parse(new UTF8Encoding(false,true).GetString(body.ToArray()),installed);
+                        deadline.Token.ThrowIfCancellationRequested();
+                        UpdateResult result=UpdateMetadata.Parse(new UTF8Encoding(false,true).GetString(body.ToArray()),installed);
+                        deadline.Token.ThrowIfCancellationRequested();
+                        return result;
                     }
                 }
             }
@@ -133,7 +136,14 @@ internal static class UpdateProbe
                 ObserveAfterCancellation(operation);
                 throw new OperationCanceledException(token);
             }
-            return await operation.ConfigureAwait(false);
+            T result=await operation.ConfigureAwait(false);
+            // When both tasks completed, WhenAny may pick the operation even though time expired.
+            if(token.IsCancellationRequested)
+            {
+                ObserveAfterCancellation(operation);
+                throw new OperationCanceledException(token);
+            }
+            return result;
         }
     }
     private static void ObserveAfterCancellation<T>(Task<T> operation)

@@ -22,6 +22,10 @@ public final class UpdatePolicyTest {
         check(UpdatePolicy.release("1.2.3", 4L, RELEASE + "-preview.1", "") != null, "official preview allowed");
         check(UpdatePolicy.release("1.2.3", 4, RELEASE.replace("github.com/", "github.com:443/"), "") != null,
             "default HTTPS port allowed");
+        check(UpdatePolicy.release("65535.65535.65535", 4, RELEASE.replace("1.2.3", "65535.65535.65535"), "") != null,
+            "each display-version component accepts the contract maximum");
+        for (String version : new String[]{"65536.0.0", "0.65536.0", "0.0.65536", "999999999.0.0", "999999999999999999999999.0.0"})
+            invalid(version, 4, RELEASE.replace("1.2.3", version), "");
         for (Object code : new Object[]{null, "4", 4.0, true, 0, -1, 2147483648L}) invalid("1.2.3", code, RELEASE, "");
         for (Object version : new Object[]{null, 123, "", "01.2.3", "1.2", "1.2.3.4", "1.2.3-beta", "1.2.3\n", "1.2.3/../4"})
             invalid(version, 4, RELEASE, "");
