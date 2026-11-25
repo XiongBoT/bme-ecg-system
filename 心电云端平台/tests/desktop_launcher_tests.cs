@@ -22,9 +22,10 @@ internal static class DesktopLauncherTests
             return Task.FromResult(new HttpResponseMessage(Status));
         }
     }
-    private static void Check(bool value, string label) { if (!value) throw new Exception(label); }
+    private static void Check(bool value, string label) { if (!value) {Console.Error.WriteLine(label);throw new Exception(label);} }
     private static int Main()
     {
+        DesktopUpdateTests.Run();
         foreach (Rectangle screen in new[] {new Rectangle(0,0,1366,728), new Rectangle(-1920,0,1920,1040), new Rectangle(0,0,800,560)})
         {
             Rectangle bounds = LaunchPolicy.WindowBounds(screen);

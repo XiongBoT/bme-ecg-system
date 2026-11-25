@@ -36,6 +36,7 @@ from workflow_store import WorkflowStore, cancel_record_intents
 from workflow_routes import add_routes as add_workflow_routes
 from maintenance_tasks import MaintenanceQueue
 from admin_console import add_routes as add_admin_console_routes
+from update_routes import add_routes as add_update_routes
 
 ROOT = Path(__file__).resolve().parent
 ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,95}\Z')
@@ -235,20 +236,22 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     app.state.jobs = jobs
     app.state.database = database_manager
     app.state.maintenance = maintenance
+    updates = add_update_routes(app, ROOT)
     app.state.workflow = workflow
 
     @app.middleware('http')
     async def guard(request: Request, call_next):
         who = {'kind': 'legacy'}
         if request.url.path.startswith('/api/'):
-            if auth_enabled and request.url.path not in ('/api/auth/config', '/api/auth/login', '/api/account-applications'):
+            public_update = request.method == 'GET' and request.url.path == '/api/updates'
+            if auth_enabled and not public_update and request.url.path not in ('/api/auth/config', '/api/auth/login', '/api/account-applications'):
                 who = auth.authenticate(request)
                 if who is None:
                     return JSONResponse({'detail': '请先登录'}, status_code=401)
                 if who['kind'] == 'user' and request.method not in ('GET', 'HEAD', 'OPTIONS'):
                     if not hmac.compare_digest(request.headers.get('x-csrf-token', ''), who['csrf_token']):
                         return JSONResponse({'detail': '登录校验已失效，请刷新页面'}, status_code=403)
-            elif not auth_enabled and token and request.url.path != '/api/auth/config' and not hmac.compare_digest(request.headers.get('x-api-key', ''), token):
+            elif not auth_enabled and token and not public_update and request.url.path != '/api/auth/config' and not hmac.compare_digest(request.headers.get('x-api-key', ''), token):
                 return JSONResponse({'detail': '访问凭证不正确'}, status_code=401)
             origin = request.headers.get('origin')
             if origin and origin.rstrip('/') != str(request.base_url).rstrip('/'):
@@ -832,11 +835,11 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
 
     @app.get('/tasks')
     def tasks_page():
-        return FileResponse(ROOT / 'web' / 'tasks.html')
+        return updates.page('tasks.html')
 
     @app.get('/operations')
     def operations_page():
-        return FileResponse(ROOT / 'web' / 'operations.html')
+        return updates.page('operations.html')
 
     @app.get('/downloads/{filename}')
     def desktop_download(filename: str):
@@ -864,22 +867,22 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
 
     @app.get('/')
     def index():
-        return FileResponse(ROOT / 'web' / 'index.html')
+        return updates.page('index.html')
 
     @app.get('/devices')
     def device_manager_page():
-        return FileResponse(ROOT / 'web' / 'device-manager.html')
+        return updates.page('device-manager.html')
 
     @app.get('/admin')
     def admin_console_page():
-        return FileResponse(ROOT / 'web' / 'admin-overview.html')
+        return updates.page('admin-overview.html')
 
     @app.get('/admin/accounts')
     def admin_accounts_page():
-        return FileResponse(ROOT / 'web' / 'account-manager.html')
+        return updates.page('account-manager.html')
 
     @app.get('/database')
     def database_page():
-        return FileResponse(ROOT / 'web' / 'database-manager.html')
+        return updates.page('database-manager.html')
 
     return app

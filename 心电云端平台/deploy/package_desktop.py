@@ -37,7 +37,9 @@ def build(output: Path) -> tuple[Path, str]:
             str(compiler), '/nologo', '/target:winexe', '/platform:anycpu',
             '/optimize+', '/utf8output', '/codepage:65001',
             '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Net.Http.dll',
+            '/reference:System.Web.Extensions.dll',
             '/win32icon:' + str(icon), '/out:' + str(executable), str(source / 'Launcher.cs'), str(source / 'LauncherCore.cs'),
+            str(source / 'UpdateCore.cs'),
         ], check=True)
         contents = {
             '心电工作台.exe': executable.read_bytes(),

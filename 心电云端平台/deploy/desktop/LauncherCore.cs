@@ -31,6 +31,7 @@ internal static class LaunchPolicy
 internal sealed class ConnectionGate
 {
     private bool running, closed;
+    internal bool IsRunning {get{return running && !closed;}}
     internal bool Begin() { if (running || closed) return false; running = true; return true; }
     internal bool Finish() { if (closed || !running) return false; running = false; return true; }
     internal void Close() { closed = true; running = false; }

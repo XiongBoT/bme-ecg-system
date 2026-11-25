@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("心电工作台")]
@@ -49,6 +50,11 @@ internal static class Launcher
     }
 
     internal static bool OpenBrowser() { return TryStart(LaunchPolicy.CloudUrl, "", true); }
+    internal static bool OpenRelease(UpdateMetadata release)
+    {
+        return release!=null && UpdateMetadata.IsOfficialUrl(release.Url.AbsoluteUri,release.VersionText) &&
+            TryStart(release.Url.AbsoluteUri,"",true);
+    }
 
     private static bool TryStart(string file, string arguments, bool shell)
     {
@@ -71,12 +77,17 @@ internal static class Launcher
 internal sealed class ConnectionWindow : Form
 {
     private readonly ConnectionGate gate = new ConnectionGate();
+    private readonly ConnectionGate updateGate = new ConnectionGate();
+    private readonly UpdateThrottle updateThrottle = UpdateThrottle.ForCurrentUser();
     private readonly CancellationTokenSource lifetime = new CancellationTokenSource();
     private readonly bool autoOpen;
     private readonly Label status = new Label();
     private readonly Label detail = new Label();
     private readonly Button open = new Button();
     private readonly Button retry = new Button();
+    private readonly LinkLabel updates = new LinkLabel();
+    private readonly Label updateStatus = new Label();
+    private bool workspaceOpened, updatePromptShowing;
 
     internal ConnectionWindow(bool autoOpen)
     {
@@ -84,17 +95,18 @@ internal sealed class ConnectionWindow : Form
         Text = "心电工作台 · 连接助手";
         Font = new Font("Microsoft YaHei UI", 10F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(570, 385);
+        ClientSize = new Size(570, 430);
         AutoScroll = true;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(246, 249, 247);
         MaximizeBox = false;
         Icon = Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location);
 
-        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize=true, MinimumSize=new Size(500,0), Padding = new Padding(28), ColumnCount = 1, RowCount = 6 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize=true, MinimumSize=new Size(500,0), Padding = new Padding(28), ColumnCount = 1, RowCount = 7 };
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -116,10 +128,15 @@ internal sealed class ConnectionWindow : Form
         shortcut.LinkClicked+=delegate {CreateShortcut();};
         var address=new LinkLabel {Text="复制云端地址",AutoSize=true,Margin=new Padding(0,5,0,5),LinkColor=Color.FromArgb(8,127,113)};
         address.LinkClicked+=delegate {try {Clipboard.SetText(LaunchPolicy.CloudUrl);detail.Text="云端地址已复制，可粘贴到浏览器打开。";} catch(ExternalException) {detail.Text="剪贴板暂不可用。云端地址："+LaunchPolicy.CloudUrl;}};
-        links.Controls.Add(shortcut);links.Controls.Add(address);layout.Controls.Add(links);
-        layout.Controls.Add(new Label {Text="Windows 版 1.2 · 需要联网 · 沿用已有心电平台账号",AutoSize=true,ForeColor=Color.FromArgb(117,135,127),Font=new Font(Font.FontFamily,9F),Margin=new Padding(0,8,0,0)});
-        Shown+=delegate {CheckConnection();};
-        FormClosing+=delegate {gate.Close();lifetime.Cancel();};
+        updates.Text="检查更新";updates.AutoSize=true;updates.Margin=new Padding(20,5,0,5);updates.LinkColor=Color.FromArgb(8,127,113);
+        updates.LinkClicked+=delegate {CheckUpdates(true);};
+        links.Controls.Add(shortcut);links.Controls.Add(address);links.Controls.Add(updates);layout.Controls.Add(links);
+        updateStatus.AutoSize=true;updateStatus.MaximumSize=new Size(480,0);updateStatus.ForeColor=Color.FromArgb(95,117,109);
+        updateStatus.Text="更新只作提醒，可继续使用当前版本。";layout.Controls.Add(updateStatus);
+        layout.Controls.Add(new Label {Text="Windows 版 "+Assembly.GetExecutingAssembly().GetName().Version.ToString(3)+" · 需要联网 · 沿用已有心电平台账号",AutoSize=true,ForeColor=Color.FromArgb(117,135,127),Font=new Font(Font.FontFamily,9F),Margin=new Padding(0,8,0,0)});
+        // Start both requests before awaiting either; opening the workspace never waits for updates.
+        Shown+=delegate {CheckUpdates(false);CheckConnection();};
+        FormClosing+=delegate {gate.Close();updateGate.Close();lifetime.Cancel();};
         FormClosed+=delegate {lifetime.Dispose();};
     }
 
@@ -160,7 +177,52 @@ internal sealed class ConnectionWindow : Form
 
     private void OpenWorkspace()
     {
-        if(Launcher.OpenWorkspace(Screen.FromControl(this).WorkingArea)) Close();else ShowLaunchError();
+        if(!Launcher.OpenWorkspace(Screen.FromControl(this).WorkingArea)) {ShowLaunchError();return;}
+        workspaceOpened=true;
+        if(!autoOpen) Close();else FinishStartup();
+    }
+    private void FinishStartup()
+    {
+        if(workspaceOpened && autoOpen && !updateGate.IsRunning && !updatePromptShowing && !IsDisposed && !Disposing) Close();
+    }
+    private async void CheckUpdates(bool manual)
+    {
+        if(!updateGate.Begin()) return;
+        if(!updateThrottle.TryBegin(DateTime.UtcNow,manual)) {updateGate.Finish();return;}
+        updates.Enabled=false;
+        if(manual) updateStatus.Text="正在检查更新…";
+        CancellationToken token=lifetime.Token;
+        // Yield once so even an immediately completed update cannot delay the connection probe.
+        await Task.Yield();
+        if(token.IsCancellationRequested) return;
+        UpdateResult result;
+        try
+        {
+            using(var client=UpdateProbe.CreateClient())
+                result=await UpdateProbe.CheckAsync(client,Assembly.GetExecutingAssembly().GetName().Version,token);
+        }
+        catch(OperationCanceledException) {return;}
+        if(!updateGate.Finish() || IsDisposed || Disposing) return;
+        updates.Enabled=true;
+        if(result.Kind==UpdateKind.NewVersion)
+        {
+            updateStatus.Text="有新版 "+result.Metadata.VersionText+" 可用，可继续使用当前版本。";
+            updatePromptShowing=true;
+            try
+            {
+                using(var prompt=new UpdateNotice(result.Metadata))
+                    if(prompt.ShowDialog(this)==DialogResult.OK && !Launcher.OpenRelease(result.Metadata))
+                        updateStatus.Text="未能打开版本页面，请稍后重新检查更新。";
+            }
+            finally {updatePromptShowing=false;}
+        }
+        else if(manual)
+        {
+            if(result.Kind==UpdateKind.Current) updateStatus.Text="当前无需更新。";
+            else if(result.Kind==UpdateKind.Unavailable) updateStatus.Text="暂未提供 Windows 更新信息，可继续使用当前版本。";
+            else updateStatus.Text="暂时无法检查更新，请检查网络后重试。当前版本仍可继续使用。";
+        }
+        FinishStartup();
     }
     private void ShowLaunchError()
     {
@@ -191,5 +253,32 @@ internal sealed class ConnectionWindow : Form
             detail.Text="未能创建快捷方式。可以在资源管理器中右键“心电工作台.exe”手动创建。";
         }
         finally {if(shortcut!=null && Marshal.IsComObject(shortcut)) Marshal.ReleaseComObject(shortcut);if(shell!=null && Marshal.IsComObject(shell)) Marshal.ReleaseComObject(shell);}
+    }
+}
+
+internal sealed class UpdateNotice : Form
+{
+    internal UpdateNotice(UpdateMetadata release)
+    {
+        Text="心电工作台 · 发现新版";Font=new Font("Microsoft YaHei UI",10F);
+        AutoScaleMode=AutoScaleMode.Font;StartPosition=FormStartPosition.CenterParent;
+        ClientSize=new Size(480,280);MinimumSize=new Size(360,240);MaximizeBox=false;MinimizeBox=false;
+        BackColor=Color.FromArgb(246,249,247);
+        var layout=new TableLayoutPanel {Dock=DockStyle.Fill,Padding=new Padding(22),ColumnCount=1,RowCount=3};
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.Controls.Add(new Label {Text="新版本 "+release.VersionText+" 可用",AutoSize=true,Font=new Font(Font,FontStyle.Bold),UseMnemonic=false,Margin=new Padding(0,0,0,12)});
+        var notes=new TextBox {Text=(release.Notes.Length>0?release.Notes+Environment.NewLine+Environment.NewLine:"")+"可前往官方版本页面查看说明并自行下载，也可稍后继续使用当前版本。",Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,BackColor=BackColor,TabStop=false};
+        layout.Controls.Add(notes);
+        var actions=new FlowLayoutPanel {AutoSize=true,Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Margin=new Padding(0,16,0,0)};
+        var later=new Button {Text="稍后",DialogResult=DialogResult.Cancel,AutoSize=true,MinimumSize=new Size(100,36)};
+        var view=new Button {Text="查看新版",DialogResult=DialogResult.OK,AutoSize=true,MinimumSize=new Size(100,36)};
+        actions.Controls.Add(later);actions.Controls.Add(view);layout.Controls.Add(actions);Controls.Add(layout);
+        CancelButton=later;AcceptButton=later;
+    }
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        Rectangle area=Screen.FromControl(this).WorkingArea;MaximumSize=area.Size;
+        Bounds=LaunchPolicy.ConnectionBounds(area,Size);
     }
 }
