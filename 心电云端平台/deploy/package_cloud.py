@@ -13,6 +13,7 @@ MEMBERS = (
     'auth_store.py', 'workspace_store.py', 'analysis_tasks.py', 'manage_accounts.py', 'measurement_store.py',
     'device_store.py', 'device_routes.py', 'web/devices.js',
     'admin_console.py', 'web/admin-common.js', 'web/admin.css',
+    'update_routes.py', 'client-releases.json', 'web/update_notice.js', 'web/update_notice.css',
     'web/admin-overview.html', 'web/admin-overview.js', 'web/account-manager.html', 'web/account-manager.js',
     'database_management.py', 'database_routes.py', 'database_backup.py', 'maintenance_tasks.py', 'tools/restore_database.py',
     'web/database-manager.html', 'web/database-manager.js', 'web/database-manager.css',

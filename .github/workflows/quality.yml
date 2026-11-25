@@ -139,6 +139,13 @@ jobs:
           "$JAVA_HOME_17_X64/bin/javac" -encoding UTF-8 -d "$RUNNER_TEMP/android-tests" src/com/xiongbot/ecgrecords/WebPolicy.java src/com/xiongbot/ecgrecords/ExportCopy.java tests/WebPolicyTest.java tests/ExportCopyTest.java
           "$JAVA_HOME_17_X64/bin/java" -cp "$RUNNER_TEMP/android-tests" com.xiongbot.ecgrecords.WebPolicyTest
           "$JAVA_HOME_17_X64/bin/java" -cp "$RUNNER_TEMP/android-tests" com.xiongbot.ecgrecords.ExportCopyTest
+      - name: Test update reminder policy, bounded transport and lifecycle state
+        working-directory: 心电云端平台/android
+        run: |
+          "$JAVA_HOME_17_X64/bin/javac" -encoding UTF-8 -d "$RUNNER_TEMP/android-update-tests" src/com/xiongbot/ecgrecords/WebPolicy.java src/com/xiongbot/ecgrecords/UpdatePolicy.java src/com/xiongbot/ecgrecords/UpdateClient.java src/com/xiongbot/ecgrecords/UpdateCheckState.java tests/UpdatePolicyTest.java tests/UpdateClientTest.java tests/UpdateCheckStateTest.java
+          "$JAVA_HOME_17_X64/bin/java" -cp "$RUNNER_TEMP/android-update-tests" com.xiongbot.ecgrecords.UpdatePolicyTest
+          "$JAVA_HOME_17_X64/bin/java" -cp "$RUNNER_TEMP/android-update-tests" com.xiongbot.ecgrecords.UpdateClientTest
+          "$JAVA_HOME_17_X64/bin/java" -cp "$RUNNER_TEMP/android-update-tests" com.xiongbot.ecgrecords.UpdateCheckStateTest
       - name: Ensure Android build components are installed
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
       - name: Build and verify APK with an ephemeral CI key

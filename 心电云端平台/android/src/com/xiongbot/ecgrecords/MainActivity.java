@@ -44,6 +44,7 @@ public final class MainActivity extends Activity {
     private WebView web;
     private LinearLayout root;
     private ReportPrinter reportPrinter;
+    private UpdateReminder updateReminder;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private String exportSession, exportUser, exportCookie;
     private static final int SAVE_CSV = 14;
@@ -53,6 +54,7 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         reportPrinter=new ReportPrinter(this);
+        updateReminder=new UpdateReminder(this);
         if(cacheCleaned.compareAndSet(false,true)) {
             File[] abandoned=getCacheDir().listFiles((dir,name)->name.startsWith("ecg-export-")&&name.endsWith(".csv"));
             if(abandoned!=null)for(File file:abandoned)file.delete();
@@ -77,6 +79,7 @@ public final class MainActivity extends Activity {
         Button help = new Button(this); help.setText("说明");
         help.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("心电记录 " + appVersion())
             .setMessage("使用已有项目账号登录。查看记录和云端分析需要联网。\n\n账号与心电数据仅发送至项目服务器：\n" + WebPolicy.ORIGIN + "\n\n应用不包含账号密码，不自动保存心电文件。点击下载时可自行选择 CSV 保存位置。\n\n本应用用于课程研究。")
+            .setNeutralButton("检查更新", (d,w) -> updateReminder.checkManually())
             .setPositiveButton("知道了", null).show());
         Button reload = new Button(this); reload.setText("重连");
         reload.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("重新连接？")
@@ -114,9 +117,10 @@ public final class MainActivity extends Activity {
         });
     }
     @Override public void onBackPressed() { goBack(); }
-    @Override protected void onPause() { web.onPause(); web.pauseTimers(); CookieManager.getInstance().flush(); super.onPause(); }
-    @Override protected void onResume() { super.onResume(); if (web != null) {web.onResume();web.resumeTimers();} }
-    @Override protected void onDestroy() { io.shutdownNow(); if(reportPrinter!=null)reportPrinter.close(); if(web != null) {web.stopLoading(); web.destroy();} super.onDestroy(); }
+    @Override protected void onPause() { if(updateReminder!=null)updateReminder.onPause(); web.onPause(); web.pauseTimers(); CookieManager.getInstance().flush(); super.onPause(); }
+    @Override protected void onResume() { super.onResume(); if (web != null) {web.onResume();web.resumeTimers();} if(updateReminder!=null)updateReminder.onResume(); }
+    @Override public void onWindowFocusChanged(boolean focused) { super.onWindowFocusChanged(focused); if(updateReminder!=null)updateReminder.onWindowFocusChanged(focused); }
+    @Override protected void onDestroy() { if(updateReminder!=null)updateReminder.close(); io.shutdownNow(); if(reportPrinter!=null)reportPrinter.close(); if(web != null) {web.stopLoading(); web.destroy();} super.onDestroy(); }
 
     private String appVersion(){
         try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}

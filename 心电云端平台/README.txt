@@ -191,6 +191,8 @@ python tools/restore_database.py /实际数据目录/backups/ecg-backup-任务�
 
 ### 新功能如何更新到各端
 
+包含检查器的新版 Windows／Android 可自动提示已发布版本；浏览器可提示主动刷新。操作、检查频率和旧安装包限制见软件更新提醒（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/更新提醒.md）。本功能仍需部署服务端并发布新安装包后才会到达用户端。
+
 | 入口 | 更新方式 |
 | --- | --- |
 | 手机/电脑浏览器、PWA、Windows 网页入口 | 服务器部署新版后重新打开或刷新页面；Windows 启动器自身版本与网页功能分别维护 |

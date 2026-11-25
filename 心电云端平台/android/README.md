@@ -44,6 +44,27 @@ python build.py --sdk "你的安卓SDK目录" --jdk "你的JDK目录"
 
 在另一个工作树构建时，可在 `build.py` 命令后加入 `--signing-dir "原签名目录"`，直接读取原签名对，不复制到工作树。显式目录缺少任一文件时停止构建，不生成替代密钥。新克隆没有原私钥，只能生成自己的试验签名，不能覆盖安装项目正式签名版本。
 
+## 更新提醒（源码待发布）
+
+安装包含此功能的新 APK 后，启动或从后台返回时会自动检查公开版本信息，通常每 24 小时最多一次；检查失败也计入间隔，调整系统时间向过去时会重新建立间隔。可随时在顶部“说明 → 检查更新”主动检查。仅发布信息的 `version_code` 大于已安装版本时提示新版；选择“稍后”继续使用，选择“查看新版”才会在系统浏览器打开本仓库的 Android Release 页面，自行下载和覆盖安装。
+
+自动检查失败时保持安静；手动检查区分“无法获取可用版本信息”和“暂未发现比当前版本更新的可用版本”。未发布、缺少 Android 版本信息或服务器尚未部署更新接口时，不能据此判断已是最新版。应用退到后台时不会弹出新提示，重新可见后再处理检查结果。
+
+检查只访问固定 HTTPS `/api/updates`，不附带登录 Cookie、账号或心电数据，不使用 CSV 导出线程，不自动下载或安装，不新增权限。连接保持系统证书与主机名校验，禁止跳转；整次请求以 6 秒为截止时间，到时主动断开连接，迟到响应不作成功处理，响应最多 16 KiB。发布链接只接受 `github.com/XiongBoT/bme-ecg-system/releases/tag/android-v版本号`（可带 `-preview.N`），更新说明以有长度限制的普通文字显示。
+
+**当前公开的 1.0.0 试用 APK 没有此检查器。** 需先手动安装一次包含检查器、采用相同正式签名且提高 `versionCode` 的新包，之后才能收到提醒；刷新网页不能替换旧 APK 的内置界面或原生代码。本轮源码仍保留 manifest 1.0.2（3），没有创建新 Release、部署服务或验证实机覆盖安装。
+
+普通 JDK 可独立验证地址、版本、间隔、响应读取和前后台检查状态。在 `android/` 中运行（`javac` / `java` 需位于 PATH）：
+
+```powershell
+javac -encoding UTF-8 -d work/update-tests src/com/xiongbot/ecgrecords/WebPolicy.java src/com/xiongbot/ecgrecords/UpdatePolicy.java src/com/xiongbot/ecgrecords/UpdateClient.java src/com/xiongbot/ecgrecords/UpdateCheckState.java tests/UpdatePolicyTest.java tests/UpdateClientTest.java tests/UpdateCheckStateTest.java
+java -cp work/update-tests com.xiongbot.ecgrecords.UpdatePolicyTest
+java -cp work/update-tests com.xiongbot.ecgrecords.UpdateClientTest
+java -cp work/update-tests com.xiongbot.ecgrecords.UpdateCheckStateTest
+```
+
+这些是软件回归检查；原生弹窗、后台恢复、系统浏览器跳转、断网提示及同签名覆盖安装仍需安卓设备验收。
+
 ## 实现与验证
 
 - Java 原生容器 + 随包网页资源，保留统一前端代码，避免手机端与浏览器版独立维护两套业务逻辑。
