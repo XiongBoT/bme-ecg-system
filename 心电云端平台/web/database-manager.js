@@ -7,6 +7,7 @@ const dbText=(id,value)=>{dbEl(id).textContent=value;};
 const dbDate=value=>value?new Date(typeof value==='number'?value*1000:value).toLocaleString():'--';
 function dbBytes(value){if(value==null || !Number.isFinite(value))return '未知';if(value<1024)return value+' B';const units=['KiB','MiB','GiB','TiB'];let i=-1;do{value/=1024;i++;}while(value>=1024&&i<units.length-1);return value.toFixed(value<10?1:0)+' '+units[i];}
 function clearDatabase(message){
+ if(typeof BackupScheduleUI!=='undefined')BackupScheduleUI.clear();
  databaseUI.epoch++;databaseUI.listVersion++;databaseUI.user=null;databaseUI.csrf='';databaseUI.total=0;databaseUI.offset=0;databaseUI.lastJobs='';databaseUI.busy=false;
  dbEl('database-content').hidden=true;dbText('db-account','');dbText('db-notice',message);
  for(const id of ['db-records','db-jobs','db-backups','db-activity','db-tables'])dbEl(id).replaceChildren();
@@ -102,6 +103,7 @@ function renderMaintenance(jobs){
  if(!jobs.length)dbText('db-jobs','尚无维护任务。可先统计存储占用，或检查现有数据。');
 }
 async function loadMaintenance(){
+ if(typeof BackupScheduleUI!=='undefined')await BackupScheduleUI.load();
  const epoch=databaseUI.epoch;const [tasks,backups,activity]=await Promise.all([dbRequest('/api/admin/database/jobs'),dbRequest('/api/admin/database/backups'),dbRequest('/api/admin/database/activity')]);
  if(epoch!==databaseUI.epoch)return;renderMaintenance(tasks.jobs);
  dbEl('db-backups').replaceChildren();for(const item of backups.backups){const row=document.createElement('div');row.className='db-backup';row.textContent=dbDate(item.created)+' · '+dbBytes(item.bytes)+' · '+item.sessions+' 条记录\n'+item.filename+'\nSHA256 '+item.sha256;dbEl('db-backups').append(row);}if(!backups.backups.length)dbText('db-backups','暂无已完成备份。');

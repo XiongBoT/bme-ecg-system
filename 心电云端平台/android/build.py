@@ -17,6 +17,7 @@ PROJECT=ROOT.parent
 WEB=PROJECT/'web'
 ASSETS=('applications.js','health.js','health_core.js','health.css','index.html','app.js','workspace.js','devices.js','measurement.js','mobile.js',
         'workflow_core.js','review.js','tasks.html','operations.html','workflow-page.js','workflow.css',
+        'annotations.js','annotations.css','backup-schedule.js',
         'physiology.js','physiology.css','experience_core.js','experience.js','experience.css',
         'connection.js','desktop_core.js','desktop.js','desktop.css',
         'style.css','workspace.css','measurement.css','mobile.css','pwa.css',

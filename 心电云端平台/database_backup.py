@@ -300,6 +300,8 @@ def restore_backup(archive, destination):
                 db.execute("UPDATE record_reviews SET context='restored'")
             if 'management_jobs' in tables:
                 db.execute("UPDATE management_jobs SET status='interrupted',stage='从备份恢复，需重新执行',error='原运行环境已改变'")
+            if 'backup_schedule' in tables:
+                db.execute("UPDATE backup_schedule SET enabled=0,next_due=NULL,retry_after=0,state='disabled',message='备份恢复后请管理员重新确认计划',revision=revision+1")
         # The temporary child is renamed, never merged with an existing directory.
         if destination.exists(): raise ValueError('目标目录已出现，停止恢复')
         os.rename(root, destination)
