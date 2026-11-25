@@ -35,6 +35,7 @@ from database_routes import add_routes as add_database_routes
 from workflow_store import WorkflowStore, cancel_record_intents
 from workflow_routes import add_routes as add_workflow_routes
 from maintenance_tasks import MaintenanceQueue
+from admin_console import add_routes as add_admin_console_routes
 
 ROOT = Path(__file__).resolve().parent
 ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,95}\Z')
@@ -279,6 +280,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
 
     add_device_routes(app,devices,require_admin)
     add_database_routes(app, database_manager, maintenance, require_admin, identity.get)
+    add_admin_console_routes(app, data, require_admin, identity.get)
 
     @app.get('/api/auth/config')
     def auth_config():
@@ -851,6 +853,14 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     @app.get('/devices')
     def device_manager_page():
         return FileResponse(ROOT / 'web' / 'device-manager.html')
+
+    @app.get('/admin')
+    def admin_console_page():
+        return FileResponse(ROOT / 'web' / 'admin-overview.html')
+
+    @app.get('/admin/accounts')
+    def admin_accounts_page():
+        return FileResponse(ROOT / 'web' / 'account-manager.html')
 
     @app.get('/database')
     def database_page():

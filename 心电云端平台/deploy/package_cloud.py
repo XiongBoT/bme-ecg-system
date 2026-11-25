@@ -12,6 +12,8 @@ MEMBERS = (
     'server.py', 'protocol.py', 'run_server.py', 'uploader.py', 'requirements.txt', 'requirements-model.txt',
     'auth_store.py', 'workspace_store.py', 'analysis_tasks.py', 'manage_accounts.py', 'measurement_store.py',
     'device_store.py', 'device_routes.py', 'web/devices.js',
+    'admin_console.py', 'web/admin-common.js', 'web/admin.css',
+    'web/admin-overview.html', 'web/admin-overview.js', 'web/account-manager.html', 'web/account-manager.js',
     'database_management.py', 'database_routes.py', 'database_backup.py', 'maintenance_tasks.py', 'tools/restore_database.py',
     'workflow_store.py', 'workflow_routes.py', 'web/workflow_core.js', 'web/review.js',
     'web/tasks.html', 'web/operations.html', 'web/workflow-page.js', 'web/workflow.css',

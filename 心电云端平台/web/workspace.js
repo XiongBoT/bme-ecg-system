@@ -43,6 +43,7 @@ function enterWorkspace(payload) {
   $('task-center').hidden=$('records-tasks').hidden=!state.user;
   const linkedRecord=new URLSearchParams(globalThis.location?.search || '').get('record');
   if(linkedRecord && /^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(linkedRecord)){state.filters.q=linkedRecord;$('query').value=linkedRecord;}
+  $('manage-console').hidden=!state.user?.is_admin;
   text('account-name',state.user ? state.user.username+' · 我的记录' : '本机工作台');
   $('login-submit').disabled=false;connectionStatus();
   refresh();
