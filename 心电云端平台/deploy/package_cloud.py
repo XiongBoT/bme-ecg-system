@@ -18,6 +18,7 @@ MEMBERS = (
     'web/admin-overview.html', 'web/admin-overview.js', 'web/account-manager.html', 'web/account-manager.js',
     'database_management.py', 'database_routes.py', 'database_backup.py', 'maintenance_tasks.py', 'tools/restore_database.py',
     'workflow_store.py', 'workflow_routes.py', 'web/workflow_core.js', 'web/review.js',
+    'annotations.py','backup_schedule.py','web/annotations.js','web/annotations.css','web/backup-schedule.js',
     'web/tasks.html', 'web/operations.html', 'web/workflow-page.js', 'web/workflow.css',
     'web/database-manager.html', 'web/database-manager.js', 'web/database-manager.css',
     'physiology_analysis.py', 'research/streaming_qrs.py', 'research/physiology.py',

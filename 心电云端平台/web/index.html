@@ -27,6 +27,8 @@
   <script src="/assets/mobile.js" defer></script>
   <script src="/assets/experience.js" defer></script>
   <script src="/assets/review.js" defer></script>
+  <script src="/assets/annotations.js" defer></script>
+  <link rel="stylesheet" href="/assets/annotations.css">
   <script src="/assets/pwa.js" defer></script>
   <script src="/assets/desktop.js" defer></script>
   <link rel="stylesheet" href="/assets/health.css">
@@ -148,6 +150,16 @@
             </div>
           </section>
 
+          <section id="annotation-panel" class="panel" hidden>
+            <div class="record-head"><h2>片段标注</h2><button id="annotation-refresh" class="button secondary" type="button">刷新标注</button></div>
+            <p class="annotation-helper">为一段波形留下观察记录。时间与波形横轴一致，每条最长 60 秒；标注不改变原始波形或分类结果。</p>
+            <form id="annotation-form"><h3 id="annotation-editing">新建片段标注</h3><div class="annotation-grid">
+              <label>起点（秒）<input id="annotation-start" type="number" min="0" step="0.001" required></label><label>终点（秒）<input id="annotation-end" type="number" min="0" step="0.001" required></label>
+              <label>标注类型<select id="annotation-kind"><option value="note">观察备注</option><option value="suspected_interference">疑似干扰</option><option value="attention">需要关注</option></select></label>
+              <label class="annotation-note">观察内容<textarea id="annotation-note" maxlength="500" rows="2" placeholder="记录所见现象，最多 500 字"></textarea></label></div>
+              <div class="annotation-actions"><button id="annotation-window" class="button secondary" type="button">使用当前波形范围</button><button id="annotation-new" class="button secondary" type="button">新建标注</button><button id="annotation-save" class="button primary" type="submit">保存标注</button></div>
+            </form><p id="annotation-feedback" class="muted" role="status"></p><label><input id="annotation-deleted" type="checkbox"> 显示已撤下的标注</label><div id="annotation-list"></div><div class="annotation-footer"><button id="annotation-prev" class="button secondary" type="button">上一页</button><span id="annotation-page"></span><button id="annotation-next" class="button secondary" type="button">下一页</button></div>
+          </section>
           <section id="review-panel" class="panel" hidden><div class="record-head"><h2>人工复核</h2><button id="review-refresh" class="button secondary" type="button">刷新复核</button></div><p class="muted">记录查看情况或干扰疑点，不改写原始数据及模型标签。</p><form id="review-form"><label>复核标记<select id="review-status"><option value="pending">待复核</option><option value="viewed">已查看</option><option value="suspected_interference">疑似干扰</option></select></label><label>复核备注<textarea id="review-note" maxlength="1000" rows="3" placeholder="记录观察到的现象（最多 1000 字）"></textarea></label><button id="review-save" class="button primary" type="submit" disabled>保存复核</button></form><p id="review-feedback" role="status" class="muted"></p></section>
           <details id="record-details" class="panel record-details" open><summary>详细信息 · 采样与上传</summary>          <div class="stats"><div class="stat panel"><span>已接收采样点</span><strong id="samples">—</strong><small id="chunks">—</small></div><div class="stat panel"><span>记录时长</span><strong id="duration">—</strong><small>按采样点数计算</small></div><div class="stat panel"><span>采样率</span><strong>360 <em>Hz</em></strong><small>单通道原始心电</small></div><div class="stat panel"><span>有效采样占比</span><strong id="valid">—</strong><small>依据 ADC 范围及记录标记</small></div></div>            <section class="panel delivery">
               <div class="panel-heading"><h2>上传与存储</h2><span id="upload-status" class="pill"></span></div>
