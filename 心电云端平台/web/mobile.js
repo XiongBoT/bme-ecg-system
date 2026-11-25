@@ -1,18 +1,25 @@
 'use strict';
-// Mobile navigation is presentation only; account and record access stay on the server.
+// Shared navigation state; account and record access stay on the server.
 var MobileUI = (() => {
   const narrow = window.matchMedia('(max-width: 720px)');
+  const stacked = window.matchMedia('(min-width: 721px) and (max-width: 1050px)');
   const shell = $('workspace-shell');
   let current = 'records';
   const scrollPositions = {records: 0, results: 0, devices: 0, account: 0};
   const buttons = ['records', 'devices', 'account'];
+  const desktopButtons = {records:'desktop-nav-records', devices:'nav-device', account:'desktop-nav-account'};
+  const needsDetail = () => current === 'results' || (!narrow.matches && !stacked.matches && current === 'records');
+  const layout = () => narrow.matches ? 'phone' : stacked.matches ? 'tablet' : 'desktop';
+  let previousLayout = layout();
 
   function paint() {
     shell.dataset.mobileView = current;
     for (const name of buttons) {
-      const button = $('nav-' + name);
-      if (name === current || (name === 'records' && current === 'results')) button.setAttribute('aria-current', 'page');
-      else button.removeAttribute('aria-current');
+      for (const id of ['nav-' + name, desktopButtons[name]]) {
+        const button = $(id);
+        if (name === current || (name === 'records' && current === 'results')) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      }
     }
   }
   function show(name, {load = true, focus = true} = {}) {
@@ -22,12 +29,10 @@ var MobileUI = (() => {
       scrollPositions[current] = window.scrollY;
       current = name;
       paint();
-      if (narrow.matches) {
-        window.scrollTo({top: scrollPositions[name], behavior: 'instant'});
-        if (focus) $(name === 'account' ? 'account-heading' : name + '-heading').focus({preventScroll: true});
-      }
+      window.scrollTo({top: scrollPositions[name], behavior: 'instant'});
+      if (focus) $(name === 'account' ? 'account-heading' : name + '-heading').focus({preventScroll: true});
     }
-    if (name === 'results' && load && state.ready) {
+    if (needsDetail() && load && state.ready) {
       if (!state.wave) detailFeedback('正在读取测量结果…');
       loadWave(); loadAnalysis();
     }
@@ -50,7 +55,10 @@ var MobileUI = (() => {
     for (const key of Object.keys(scrollPositions)) scrollPositions[key] = 0;
     paint(); filtersChanged();
   }
-  for (const name of buttons) $('nav-' + name).onclick = () => show(name);
+  for (const name of buttons) {
+    $('nav-' + name).onclick = () => show(name);
+    $(desktopButtons[name]).onclick = () => show(name);
+  }
   $('back-records').onclick = () => show('records');
   // A chapter link must focus the destination for keyboard/screen-reader users.
   for (const link of document.querySelectorAll('.result-shortcuts a')) {
@@ -68,17 +76,22 @@ var MobileUI = (() => {
   const syncInstall = () => {$('account-install').hidden = installed.matches || window.navigator.standalone === true;};
   installed.addEventListener('change', syncInstall);
   window.addEventListener('appinstalled', () => {$('account-install').hidden = true;});
-  narrow.addEventListener('change', () => {
+  const resized = () => {
+    // Both media queries may fire for one resize; only refresh for the final layout once.
+    if (previousLayout === layout()) return;
+    previousLayout = layout();
     $('filter-panel').open = !narrow.matches;
     paint();
-    if (state.ready && (!narrow.matches || current === 'results')) {loadWave(); loadAnalysis();}
+    if (state.ready && needsDetail()) {loadWave(); loadAnalysis();}
     requestAnimationFrame(draw);
-  });
+  };
+  narrow.addEventListener('change', resized);
+  stacked.addEventListener('change', resized);
   $('filter-panel').open = !narrow.matches;
   syncInstall(); paint();
   return {
     reset, selectionChanged, filtersChanged, show,
-    needsDetail: () => !narrow.matches || current === 'results',
-    openResult: () => narrow.matches && show('results'),
+    needsDetail,
+    openResult: () => (narrow.matches || stacked.matches) && show('results'),
   };
 })();

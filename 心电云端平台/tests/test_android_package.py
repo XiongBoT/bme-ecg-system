@@ -27,7 +27,7 @@ class AndroidPackageTests(unittest.TestCase):
                 if value:self.ids.append(value)
         page=Elements();page.feed((ROOT/'web/index.html').read_text(encoding='utf-8'))
         self.assertEqual(len(page.ids),len(set(page.ids)))
-        for target in ('nav-records','nav-devices','nav-account','devices-heading','desktop-nav-records','filter-panel','filters-toggle','account-heading','results-heading','preview-report','report-dialog','report-print'):
+        for target in ('nav-records','nav-devices','nav-account','devices-heading','desktop-nav-records','desktop-nav-account','nav-device','nav-tasks','account-admin-group','account-security-group','filter-panel','filters-toggle','account-heading','results-heading','preview-report','report-dialog','report-print'):
             self.assertIn(target,page.ids)
         self.assertNotIn('nav-results',page.ids)
 

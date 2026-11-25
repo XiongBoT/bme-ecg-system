@@ -15,7 +15,7 @@ import zipfile
 ROOT=Path(__file__).resolve().parent
 PROJECT=ROOT.parent
 WEB=PROJECT/'web'
-ASSETS=('applications.js','health.js','health_core.js','health.css','index.html','app.js','workspace.js','devices.js','measurement.js','mobile.js',
+ASSETS=('applications.js','health.js','health_core.js','health.css','navigation.css','index.html','app.js','workspace.js','devices.js','measurement.js','mobile.js',
         'workflow_core.js','review.js','tasks.html','operations.html','workflow-page.js','workflow.css',
         'physiology.js','physiology.css','experience_core.js','experience.js','experience.css',
         'connection.js','desktop_core.js','desktop.js','desktop.css',
