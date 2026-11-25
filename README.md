@@ -2,7 +2,7 @@
 
 STM32 心电采集、树莓派显示与分析、云端记录平台，以及“心电健康助手”手机应用的共同开发仓库。
 
-当前文档对应 2026-11-25 主分支 `87f23ba`。先看[系统框图](docs/系统架构.md)了解全链路；版本与实际可用范围见[交付状态](docs/版本与交付状态.md)。
+当前文档已同步 2026-11-25 主分支 `bace737`；本次安装包构建自 `87f23ba`，不包含随后合入的片段标注和自动备份。先看[系统框图](docs/系统架构.md)了解全链路；版本与实际可用范围见[交付状态](docs/版本与交付状态.md)。
 
 按使用目的选择入口。各模块 README 提供导航，具体操作在模块 `docs/`；离线 `README.txt` 由现行 Markdown 自动生成。
 
@@ -23,11 +23,11 @@ STM32 心电采集、树莓派显示与分析、云端记录平台，以及“�
 
 | 平台 | 当前下载或入口 | 使用方式 |
 | --- | --- | --- |
-| Windows 10/11 | [下载 1.1.0 ZIP](https://github.com/XiongBoT/bme-ecg-system/releases/download/desktop-v1.1.0/ecg-workspace-windows-1.1.0.zip) · [版本与校验](https://github.com/XiongBoT/bme-ecg-system/releases/tag/desktop-v1.1.0) | 全部解压后双击“心电工作台.exe”；无需 Python 或 Node.js，需联网 |
-| Android 8.0+ | [下载 1.0.0 试用 APK](https://github.com/XiongBoT/bme-ecg-system/releases/download/android-v1.0.0-preview.1/ecg-records-1.0.0.apk) · [版本与校验](https://github.com/XiongBoT/bme-ecg-system/releases/tag/android-v1.0.0-preview.1) | 安装后使用现有平台账号；实体手机安装、保存和升级仍待验收 |
+| Windows 10/11 | [下载 1.2.0 试用 ZIP](https://github.com/XiongBoT/bme-ecg-system/releases/download/desktop-v1.2.0/ecg-workspace-windows-1.2.0.zip) · [版本与校验](https://github.com/XiongBoT/bme-ecg-system/releases/tag/desktop-v1.2.0) | 全部解压后双击“心电工作台.exe”；无需 Python 或 Node.js，需联网 |
+| Android 8.0+ | [下载 1.1.0 试用 APK](https://github.com/XiongBoT/bme-ecg-system/releases/download/android-v1.1.0-preview.1/ecg-records-1.1.0.apk) · [版本与校验](https://github.com/XiongBoT/bme-ecg-system/releases/tag/android-v1.1.0-preview.1) | 安装后使用现有平台账号；实体手机安装、保存和升级仍待验收 |
 | 浏览器／iPhone | [打开 HTTPS 网页](https://62.234.150.104/) | 联网使用；iPhone 可添加到主屏幕 |
 
-**当前下载仍为 Windows 1.1.0 和 Android 1.0.0 试用版。** 心电健康助手 1.1.0、统一管理后台、任务中心与人工复核均已合入源码，新版 APK 尚无公开 Release；发布与部署状态见[统一状态页](docs/版本与交付状态.md)。旧 APK 的“记录、结果、账号”与新源码的“记录、设备、我的”属于不同版本；刷新旧 APK 不会更新内置界面。
+**最新公开下载为 Windows 1.2.0 和 Android 1.1.0（4），均为试用版。** 两个安装包及校验文件均已从公开地址下载并核验。账号申请、趋势和固定时长测量仍需配套云端／终端升级；实体设备验收尚未完成，详见[统一状态页](docs/版本与交付状态.md)。旧 APK 的“记录、结果、账号”与新版的“记录、设备、我的”属于不同版本；需手动安装新版，刷新旧 APK 不会更新内置界面。
 
 仓库及安装包公开，个人心电记录仍需使用本人平台账号登录。新版部署后可在登录页申请账号，由管理员审核；旧版或忘记密码时联系项目管理员；GitHub 账号、服务器 SSH 账号与平台账号分别管理。
 
