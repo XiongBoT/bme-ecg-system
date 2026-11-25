@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 function harness(){
  const elements=new Map(),make=()=>({textContent:'',value:'',hidden:false,disabled:false,open:false,children:[],listeners:{},append(...v){this.children.push(...v)},replaceChildren(...v){this.children=[...v]},reset(){},showModal(){this.open=true},close(){this.open=false;this.listeners.close?.()},addEventListener(k,fn){this.listeners[k]=fn},setAttribute(){},removeAttribute(){},classList:{add(){}}});
  const el=id=>{if(!elements.has(id))elements.set(id,make());return elements.get(id)};
- const context=vm.createContext({document:{getElementById:el,createElement:make,querySelector:()=>null,querySelectorAll:()=>[],body:{dataset:{}},hidden:false,addEventListener(){}},window:{location:{pathname:'/admin/accounts',search:''},addEventListener(){},history:{replaceState(){}}},setInterval(){},URLSearchParams,AbortSignal,console,fetch:async()=>{},confirm:()=>true});
+ const context=vm.createContext({document:{getElementById:el,createElement:make,createElementNS:make,querySelector:()=>null,querySelectorAll:()=>[],body:{dataset:{}},hidden:false,addEventListener(){}},window:{location:{pathname:'/admin/accounts',search:''},addEventListener(){},history:{replaceState(){}}},setInterval(){},URLSearchParams,AbortSignal,console,fetch:async()=>{},confirm:()=>true});
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/admin-common.js'),'utf8'),context);
  const file=path.join(__dirname,'../web/account-manager.js');assert.ok(fs.existsSync(file),'dedicated account page missing');
  vm.runInContext(fs.readFileSync(file,'utf8').replace(/initializeAccounts\(\);\s*$/,''),context);

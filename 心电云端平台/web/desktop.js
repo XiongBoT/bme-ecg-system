@@ -30,10 +30,6 @@ $('filters-toggle').onclick=()=>{
   $('filter-panel').open=!$('filter-panel').open;
 };
 $('filter-panel').addEventListener('toggle',()=>$('filters-toggle').setAttribute('aria-expanded',String($('filter-panel').open)));
-$('desktop-nav-records').onclick=()=>{$('sessions').scrollIntoView({behavior:'smooth',block:'start'});};
-$('nav-device').onclick=()=>{
-  const expanded=document.body.classList.toggle('device-expanded');$('nav-device').setAttribute('aria-expanded',String(expanded));
-};
 for(const id of ['download-desktop','nav-download','login-download'])$(id).onclick=()=>$('desktop-download').showModal();
 $('desktop-download-close').onclick=()=>$('desktop-download').close();
 let reconnecting=false;

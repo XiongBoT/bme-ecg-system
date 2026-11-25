@@ -5,6 +5,7 @@ const client=ECGWorkflow.client((...args)=>fetch(...args),message=>{
  listVersion++;ready=false;element('page-content').hidden=true;element('metrics').replaceChildren();
  for(const id of ['task-list','issues'])element(id)?.replaceChildren();
  element('page-account').textContent='';element('page-notice').textContent=message;
+ for(const id of ['workflow-admin-nav','operations-link','admin-link'])if(element(id))element(id).hidden=true;
  if(element('preferences-form'))element('preferences-form').reset();
 });
 const text=(id,value)=>{element(id).textContent=value;};
@@ -70,10 +71,10 @@ async function initializePage(){
   const me=await client.request('/api/auth/me');if(epoch!==client.epoch)return;
   if(!me.user||(mode==='operations'&&!me.user.is_admin)){client.clear('请返回工作台登录'+(mode==='operations'?'管理员':'本人')+'账号。');return;}
   client.set(me.user,me.csrf_token);const activeEpoch=client.epoch;
+  for(const id of ['workflow-admin-nav','operations-link','admin-link'])if(element(id))element(id).hidden=!me.user.is_admin;
   if(mode==='tasks'){
    const pref=await client.request('/api/workflow/preferences');if(activeEpoch!==client.epoch)return;
    element('auto-model').checked=pref.auto_model;element('auto-physiology').checked=pref.auto_physiology;
-   element('operations-link').hidden=!me.user.is_admin;
   }
   text('page-account',me.user.username+' · '+(mode==='tasks'?'仅显示本人记录':'管理员运行视图'));ready=true;element('page-content').hidden=false;await refreshPage();
  }catch(error){if(epoch===client.epoch||client.user)text('page-notice',error.message+'；请返回工作台确认登录后重试。');}
