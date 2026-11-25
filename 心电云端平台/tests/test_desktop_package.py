@@ -21,10 +21,12 @@ class DesktopPackageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='ecg-launcher-tests-') as directory:
             executable=Path(directory)/'launcher-tests.exe'
             compile_result=subprocess.run([str(compiler),'/nologo','/target:exe','/utf8output','/codepage:65001',
-                '/reference:System.Drawing.dll','/reference:System.Net.Http.dll','/out:'+str(executable),
-                str(ROOT/'deploy/desktop/LauncherCore.cs'),str(ROOT/'tests/desktop_launcher_tests.cs')],capture_output=True,text=True,encoding='utf-8',errors='replace')
+                '/reference:System.Drawing.dll','/reference:System.Net.Http.dll','/reference:System.Web.Extensions.dll','/out:'+str(executable),
+                str(ROOT/'deploy/desktop/LauncherCore.cs'),
+                *[str(path) for path in sorted((ROOT/'deploy/desktop').glob('Update*.cs'))],
+                str(ROOT/'tests/desktop_launcher_tests.cs'),str(ROOT/'tests/desktop_update_tests.cs')],capture_output=True,text=True,encoding='utf-8',errors='replace')
             self.assertEqual(compile_result.returncode,0,compile_result.stdout+compile_result.stderr)
-            result=subprocess.run([str(executable)],capture_output=True,text=True,timeout=15)
+            result=subprocess.run([str(executable)],capture_output=True,text=True,timeout=20,encoding='utf-8',errors='replace')
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
     def test_build_extract_and_verify_delivery_allowlist(self):

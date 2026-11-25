@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "windows": {
+    "version": "1.1.0",
+    "url": "https://github.com/XiongBoT/bme-ecg-system/releases/tag/desktop-v1.1.0",
+    "notes": "已发布的 Windows 免安装版本。请在发布页核对说明与校验文件。"
+  },
+  "android": {
+    "version": "1.0.0",
+    "version_code": 1,
+    "url": "https://github.com/XiongBoT/bme-ecg-system/releases/tag/android-v1.0.0-preview.1",
+    "notes": "已发布的 Android 试用版本。安装前请阅读发布页说明。"
+  }
+}

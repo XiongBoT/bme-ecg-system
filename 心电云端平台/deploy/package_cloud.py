@@ -14,6 +14,7 @@ MEMBERS = (
     'account_applications.py', 'web/applications.js', 'health_routes.py', 'web/health.js', 'web/health_core.js', 'web/health.css',
     'device_store.py', 'device_routes.py', 'web/devices.js',
     'admin_console.py', 'web/admin-common.js', 'web/admin.css',
+    'update_routes.py', 'client-releases.json', 'web/update_notice.js', 'web/update_notice.css',
     'web/admin-overview.html', 'web/admin-overview.js', 'web/account-manager.html', 'web/account-manager.js',
     'database_management.py', 'database_routes.py', 'database_backup.py', 'maintenance_tasks.py', 'tools/restore_database.py',
     'workflow_store.py', 'workflow_routes.py', 'web/workflow_core.js', 'web/review.js',
