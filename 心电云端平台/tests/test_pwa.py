@@ -65,7 +65,7 @@ class PwaTests(unittest.TestCase):
             for module in modules:
                 name=module.replace('.','/')+'.py'
                 if (ROOT/name).is_file():self.assertIn(name,MEMBERS,'服务器包缺少本地依赖')
-        for page in ['web/index.html','web/device-manager.html']:
+        for page in ['web/index.html','web/device-manager.html','web/database-manager.html','web/admin-overview.html','web/account-manager.html']:
             if not (ROOT/page).exists():continue
             for name in re.findall(r'(?:src|href)="/assets/([^"?#]+)"',(ROOT/page).read_text(encoding='utf-8')):
                 self.assertIn('web/'+name,MEMBERS,'网页包缺少静态资源')

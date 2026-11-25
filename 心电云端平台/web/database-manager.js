@@ -1,7 +1,7 @@
 'use strict';
 const dbEl=id=>document.getElementById(id);
 const databaseUI={epoch:0,listVersion:0,user:null,csrf:'',offset:0,limit:25,total:0,busy:false,polling:false,lastJobs:''};
-const dbKinds={scan:'统计占用',check:'完整性检查',backup:'服务器备份',cleanup:'清理中断临时文件',trash:'移入回收站',restore:'恢复记录'};
+const dbKinds={scan:'统计占用',check:'完整性检查',backup:'服务器备份',cleanup:'清理中断临时文件',trash:'移入回收站',restore:'恢复记录',grant:'添加账号设备授权',revoke_grant:'取消账号设备授权'};
 const dbStatuses={queued:'等待处理',running:'正在处理',complete:'已完成',failed:'未完成',interrupted:'已中断'};
 const dbText=(id,value)=>{dbEl(id).textContent=value;};
 const dbDate=value=>value?new Date(typeof value==='number'?value*1000:value).toLocaleString():'--';
@@ -12,6 +12,7 @@ function clearDatabase(message){
  for(const id of ['db-records','db-jobs','db-backups','db-activity','db-tables'])dbEl(id).replaceChildren();
  for(const id of ['db-count','db-count-note','db-raw','db-raw-note','db-size','db-free','db-free-note','db-scan-detail','db-total','db-record-notice'])dbText(id,'');
  dbEl('db-filters').reset();dbEl('db-owner').replaceChildren();dbEl('db-device').replaceChildren();
+ dbEl('db-registered-day').value='';
 }
 async function dbRequest(path,method='GET',payload){
  const epoch=databaseUI.epoch;
@@ -36,11 +37,27 @@ function renderOverview(data){
 function recordParams(){
  const p=new URLSearchParams({limit:String(databaseUI.limit),offset:String(databaseUI.offset),state:dbEl('db-state').value||'active'});
  for(const [key,id] of [['q','db-query'],['owner_id','db-owner'],['device_id','db-device']])if(dbEl(id).value)p.set(key,dbEl(id).value);
+ if(dbEl('db-registered-day').value)p.set('registered_day',dbEl('db-registered-day').value);
  const start=dbEl('db-from').value,end=dbEl('db-before').value;
  if(start&&end&&start>end)throw new Error('开始日期不能晚于结束日期');
  if(start)p.set('started_from',new Date(start+'T00:00:00').toISOString());
  if(end){const value=new Date(end+'T00:00:00');value.setDate(value.getDate()+1);p.set('started_before',value.toISOString());}
  return p;
+}
+function restoreDatabaseFilters(){
+ const p=new URLSearchParams(window.location.search);
+ for(const [key,id] of [['q','db-query'],['owner_id','db-owner'],['device_id','db-device'],['registered_day','db-registered-day'],['from','db-from'],['before','db-before']]){
+  const value=p.get(key)||'';
+  if(value&&['db-owner','db-device'].includes(id)&&dbEl(id).options&&!Array.from(dbEl(id).options).some(o=>o.value===value))option(id,value,'指定编号：'+value);
+  dbEl(id).value=value.slice(0,100);
+ }
+ dbEl('db-state').value=['active','complete','uploading','trashed'].includes(p.get('state'))?p.get('state'):'active';
+ databaseUI.offset=Math.max(0,Math.min(1000000,Math.floor(Number(p.get('offset'))||0)));
+}
+function rememberDatabaseFilters(){
+ const p=new URLSearchParams({state:dbEl('db-state').value||'active',offset:String(databaseUI.offset)});
+ for(const [key,id] of [['q','db-query'],['owner_id','db-owner'],['device_id','db-device'],['registered_day','db-registered-day'],['from','db-from'],['before','db-before']])if(dbEl(id).value)p.set(key,dbEl(id).value);
+ window.history.replaceState(null,'','/database?'+p+(window.location.hash||''));
 }
 async function loadDatabaseRecords(){
  const version=++databaseUI.listVersion,epoch=databaseUI.epoch;
@@ -48,16 +65,20 @@ async function loadDatabaseRecords(){
  try{
   const data=await dbRequest('/api/admin/database/records?'+recordParams());
   if(version!==databaseUI.listVersion||epoch!==databaseUI.epoch)return;
+  if(databaseUI.offset&&databaseUI.offset>=data.total){databaseUI.offset=data.total?Math.floor((data.total-1)/databaseUI.limit)*databaseUI.limit:0;return loadDatabaseRecords();}
   databaseUI.total=data.total;dbText('db-total',data.total+' 条');dbText('db-record-notice',data.total?'':'没有符合条件的记录。');dbEl('db-records').replaceChildren();
   for(const item of data.records){
    const row=document.createElement('article'),main=document.createElement('div'),name=document.createElement('strong'),id=document.createElement('p'),meta=document.createElement('div'),detail=document.createElement('p'),button=document.createElement('button');
    row.className='db-record';name.textContent=item.name||item.session_id;id.textContent=item.session_id;main.append(name,id);meta.className='db-record-meta';
    detail.textContent=(item.username||'未分配')+' · '+(item.device_id||'未知设备')+' · '+dbDate(item.started_utc)+'\n'+item.sample_count.toLocaleString()+' 点 · '+(item.trashed_at?'回收站':item.complete?'上传完成':'上传中');meta.append(detail);
+   if(item.device_id){const link=document.createElement('a');link.href='/devices?'+new URLSearchParams({selected:item.device_id});link.textContent='查看设备';meta.append(link);}
+   if(item.owner_id){const link=document.createElement('a');link.href='/admin/accounts?'+new URLSearchParams({selected:item.owner_id});link.textContent=' · 查看账号';meta.append(link);}
    button.type='button';button.className='button secondary';button.textContent=item.trashed_at?'恢复记录':'移入回收站';button.disabled=!item.complete&&!item.trashed_at;
    button.onclick=()=>changeDatabaseRecord(item,button);row.append(main,meta,button);dbEl('db-records').append(row);
   }
   dbText('db-page',(Math.floor(databaseUI.offset/databaseUI.limit)+1)+' / '+Math.max(1,Math.ceil(data.total/databaseUI.limit)));
   dbEl('db-prev').disabled=databaseUI.offset===0;dbEl('db-next').disabled=databaseUI.offset+databaseUI.limit>=data.total;
+  rememberDatabaseFilters();
  }catch(error){if(epoch===databaseUI.epoch&&version===databaseUI.listVersion)dbText('db-record-notice',error.message+'；可重新筛选或刷新。');}
 }
 async function changeDatabaseRecord(item,button){
@@ -104,11 +125,14 @@ async function initializeDatabase(){
   const [users,devices]=await Promise.all([dbRequest('/api/admin/users'),dbRequest('/api/admin/devices')]);if(epoch!==databaseUI.epoch)return;
   option('db-owner','','全部用户');option('db-owner','unassigned','尚未分配');for(const user of users.users)option('db-owner',user.id,user.username+(user.active?'':'（停用）'));
   option('db-device','','全部设备');for(const device of devices.devices)option('db-device',device.device_id,device.name||device.device_id);
+  restoreDatabaseFilters();
   dbText('db-account',me.user.username+' · 管理员');dbEl('database-content').hidden=false;await refreshDatabase();
  }catch(error){if(epoch===databaseUI.epoch)clearDatabase(error.message+'；请返回工作台确认登录状态。');}
 }
 dbEl('db-refresh').onclick=refreshDatabase;
 dbEl('db-filters').addEventListener('submit',event=>{event.preventDefault();databaseUI.offset=0;loadDatabaseRecords();});
+dbEl('db-registered-day').onchange=()=>{databaseUI.offset=0;loadDatabaseRecords();};
+dbEl('db-clear-filters').onclick=()=>{dbEl('db-filters').reset();dbEl('db-registered-day').value='';databaseUI.offset=0;loadDatabaseRecords();};
 dbEl('db-prev').onclick=()=>{databaseUI.offset=Math.max(0,databaseUI.offset-databaseUI.limit);loadDatabaseRecords();};
 dbEl('db-next').onclick=()=>{databaseUI.offset+=databaseUI.limit;loadDatabaseRecords();};
 for(const kind of ['scan','check','backup'])dbEl('db-'+kind).onclick=()=>startMaintenance(kind);

@@ -18,6 +18,8 @@ class DeviceUpdate(BaseModel):
     name:str|None=Field(default=None,max_length=100)
     active:bool|None=Field(default=None,strict=True)
     user_ids:list[UserId]|None=Field(default=None,max_length=500)
+    expected_user_ids:list[UserId]|None=Field(default=None,max_length=500)
+    expected_legacy_shared:bool|None=Field(default=None,strict=True)
 
 
 def add_routes(app,store,require_admin):
