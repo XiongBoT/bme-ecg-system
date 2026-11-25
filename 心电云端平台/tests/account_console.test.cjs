@@ -23,6 +23,15 @@ test('creating account validates password confirmation before any request',async
  const h=harness();let calls=0;h.state.session.request=async()=>{calls++;};h.el('account-new-name').value='new-user';h.el('account-new-password').value='Example-test-812!';h.el('account-new-confirm').value='different';
  await h.el('account-create-form').onsubmit({preventDefault(){}});assert.equal(calls,0);assert.match(h.el('account-create-error').textContent,/一致/);
 });
+test('dedicated admin forms accept five characters and reject four',async()=>{
+ const h=harness(),requests=[];h.context.accountMutation=async action=>action();h.state.session.request=async(path,method,payload)=>{requests.push({path,payload});return {id:'created'};};
+ h.el('account-new-name').value='new-user';h.el('account-new-password').value=h.el('account-new-confirm').value='1234';
+ await h.el('account-create-form').onsubmit({preventDefault(){}});assert.equal(requests.length,0);
+ h.el('account-new-password').value=h.el('account-new-confirm').value='12345';
+ await h.el('account-create-form').onsubmit({preventDefault(){}});assert.equal(requests[0].payload.password,'12345');
+ h.state.passwordTarget={id:'created',username:'new-user'};h.el('account-password-value').value=h.el('account-password-confirm').value='abcde';
+ await h.el('account-password-form').onsubmit({preventDefault(){}});assert.equal(requests[1].payload.new_password,'abcde');
+});
 test('successful change remains visible if list refresh fails',async()=>{
  const h=harness();h.state.session.request=async()=>{throw new Error('断网')};
  await h.context.accountMutation(async()=>({ok:true}),'操作成功');assert.match(h.el('accounts-success').textContent,/操作成功/);assert.match(h.el('accounts-error').textContent,/断网/);

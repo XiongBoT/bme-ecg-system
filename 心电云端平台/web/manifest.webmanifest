@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "心电记录",
-  "short_name": "心电记录",
+  "name": "心电健康助手",
+  "short_name": "心电健康助手",
   "description": "查看属于自己的心电采集记录、波形和辅助分析结果。",
   "lang": "zh-CN",
   "start_url": "/",

@@ -32,6 +32,17 @@ function harness() {
     loadMobile(){vm.runInContext(fs.readFileSync(path.join(root,'mobile.js'),'utf8'),context);},
     loadExperience(){vm.runInContext(fs.readFileSync(path.join(root,'experience.js'),'utf8'),context);}};
 }
+test('merged health workspace preserves task and admin navigation with account permissions',()=>{
+  const h=harness();h.context.refresh=()=>{};h.context.location.search='?record=linked-record';
+  h.context.enterWorkspace({user:{id:'admin',is_admin:true}});
+  for(const id of ['manage-console','manage-operations','task-center','records-tasks'])assert.equal(h.element(id).hidden,false);
+  assert.equal(h.state.filters.q,'linked-record');
+  h.context.enterWorkspace({user:{id:'ordinary',is_admin:false}});
+  assert.equal(h.element('manage-console').hidden,true);assert.equal(h.element('manage-operations').hidden,true);
+  assert.equal(h.element('task-center').hidden,false);
+  const html=fs.readFileSync(path.join(__dirname,'../web/index.html'),'utf8');
+  for(const id of ['manage-console','manage-operations','task-center','records-tasks','app-preferences','health-measure-open','apply-account'])assert.equal(html.split('id="'+id+'"').length-1,1);
+});
 test('switching account clears text, device status, forms and pagination before fetch',()=>{
   const h=harness();h.state.user={id:'alice'};
   for(const id of ['record-name','record-note','record-id','model-message','device-signal','session-count']) h.element(id).textContent='Alice private';

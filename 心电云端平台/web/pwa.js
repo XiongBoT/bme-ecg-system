@@ -9,7 +9,7 @@
   const feedback=value=>{el('pwa-feedback').textContent=value;};
   function installState(){
     el('pwa-install').hidden=installed();
-    el('pwa-context').textContent=installed()?'桌面应用 · 联网查看记录':'把心电记录放到手机桌面';
+    el('pwa-context').textContent=installed()?'桌面应用 · 联网查看记录':'把心电健康助手放到手机桌面';
   }
   function help(){
     feedback('');

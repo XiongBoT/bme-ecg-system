@@ -62,7 +62,7 @@ async function accountMutation(action,message,onSuccess){
 }
 accountTools.el('account-create-form').onsubmit=async event=>{
  event.preventDefault();if(accountUI.busy)return;const name=accountTools.el('account-new-name').value.trim().toLowerCase(),password=accountTools.el('account-new-password').value;
- let error='';if(!/^[a-z0-9][a-z0-9_-]{2,31}$/.test(name))error='账号须为 3–32 位字母、数字、横线或下划线';else if(password.length<10||password.length>128)error='密码须为 10–128 个字符';else if(password!==accountTools.el('account-new-confirm').value)error='两次密码不一致';
+ let error='';if(!/^[a-z0-9][a-z0-9_-]{2,31}$/.test(name))error='账号须为 3–32 位字母、数字、横线或下划线';else if(Array.from(password).length<5||Array.from(password).length>128)error='密码须为 5–128 个字符';else if(password!==accountTools.el('account-new-confirm').value)error='两次密码不一致';
  accountTools.text('account-create-error',error);if(error)return;
  await accountMutation(()=>accountUI.session.request('/api/admin/users','POST',{username:name,password}),'账号已创建。请在账号详情的“管理设备授权”中继续配置采集设备。',async result=>{clearAccountSecrets();accountTools.el('account-new-name').value='';await selectAccount(result.id);});
 };
@@ -73,7 +73,7 @@ accountTools.el('account-password-dialog').addEventListener('close',()=>{account
 accountTools.el('account-password-cancel').onclick=()=>accountTools.el('account-password-dialog').close();
 accountTools.el('account-password-form').onsubmit=async event=>{
  event.preventDefault();const target=accountUI.passwordTarget,password=accountTools.el('account-password-value').value;if(!target||accountUI.busy)return;
- if(password.length<10||password.length>128||password!==accountTools.el('account-password-confirm').value){accountTools.text('account-password-error','请输入 10–128 个字符的新密码，并确保两次输入一致。');return;}
+ if(Array.from(password).length<5||Array.from(password).length>128||password!==accountTools.el('account-password-confirm').value){accountTools.text('account-password-error','请输入 5–128 个字符的新密码，并确保两次输入一致。');return;}
  await accountMutation(()=>accountUI.session.request('/api/admin/users/'+encodeURIComponent(target.id)+'/password','POST',{new_password:password}),'密码已重置，原有登录已失效。',()=>accountTools.el('account-password-dialog').close());
  if(accountTools.el('account-password-dialog').open)accountTools.text('account-password-error',accountTools.el('accounts-error').textContent);
 };

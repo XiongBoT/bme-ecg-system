@@ -62,8 +62,8 @@ class AuthStore:
         username = username.strip().lower()
         if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{2,31}', username):
             raise ValueError('账号使用 3–32 位字母、数字、横线或下划线')
-        if not 10 <= len(password) <= 128:
-            raise ValueError('密码须为 10–128 个字符')
+        if not 5 <= len(password) <= 128:
+            raise ValueError('密码须为 5–128 个字符')
         encoded = password_hash(password)
         with closing(self.connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
@@ -84,8 +84,8 @@ class AuthStore:
         return token
 
     def change_password(self, uid, current_password, new_password):
-        if not 10 <= len(new_password) <= 128:
-            raise HTTPException(422, '密码须为 10–128 个字符')
+        if not 5 <= len(new_password) <= 128:
+            raise HTTPException(422, '密码须为 5–128 个字符')
         encoded = password_hash(new_password)
         with closing(self.connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
@@ -127,8 +127,8 @@ class AuthStore:
             return {'revoked_sessions': count}
 
     def manage_user(self, uid, *, active=None, new_password=None):
-        if new_password is not None and not 10 <= len(new_password) <= 128:
-            raise HTTPException(422, '密码须为 10–128 个字符')
+        if new_password is not None and not 5 <= len(new_password) <= 128:
+            raise HTTPException(422, '密码须为 5–128 个字符')
         encoded = password_hash(new_password) if new_password is not None else None
         with closing(self.connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')

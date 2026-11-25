@@ -76,9 +76,16 @@ class BackupTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.backup.create_backup(self.data, 'd' * 32)
 
     def test_restore_can_be_opened_but_old_cookies_and_device_keys_are_revoked(self):
+        with closing(sqlite3.connect(self.data / 'cloud.sqlite')) as db,db:
+            for index,status in enumerate(('queued','accepted','recording','uploading','completed')):
+                db.execute('INSERT INTO measurement_requests VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                           (str(index),self.user['id'],'pi2-demo',str(index),60,status,1,99999999999,1,None,''))
         result = self.backup.create_backup(self.data, 'e' * 32)
         destination = Path(self.tmp.name) / 'new-data'
         self.backup.restore_backup(self.data / 'backups' / result['filename'], destination)
+        with closing(sqlite3.connect(destination / 'cloud.sqlite')) as db:
+            self.assertEqual(dict(db.execute('SELECT id,status FROM measurement_requests')),
+                             {'0':'failed','1':'failed','2':'failed','3':'failed','4':'completed'})
         with TestClient(create_app(destination, auth_enabled=True, cookie_secure=False)) as client:
             client.cookies.update(self.client.cookies)
             self.assertEqual(client.get('/api/sessions').status_code, 401)

@@ -28,7 +28,7 @@ class PwaTests(unittest.TestCase):
         m=r.json()
         self.assertEqual((m['id'],m['scope'],m['start_url']),('/','/','/'))
         self.assertEqual(m['display'],'standalone')
-        self.assertEqual(m['name'],'心电记录')
+        self.assertEqual(m['name'],'心电健康助手')
         sizes=set()
         for icon in m['icons']:
             r=self.client.get(icon['src']);self.assertEqual(r.status_code,200)

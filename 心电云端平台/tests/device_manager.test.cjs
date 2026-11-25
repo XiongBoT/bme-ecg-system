@@ -11,6 +11,13 @@ test('closing credential dialog erases the secret from state and text',()=>{
  const h=harness();h.ctx.showCredentials({device_id:'pi',token:'temporary-test-secret'});h.el('device-credentials').close();
  assert.equal(h.state.credentials,null);assert.equal(h.el('credential-value').value,'');
 });
+test('selected device keeps hardware facts and reports unknown fields explicitly',()=>{
+ const h=harness();h.state.users=[];
+ h.ctx.drawDeviceEditor({device_id:'pi-health',name:'采集终端',active:true,user_ids:[],connection:'online',state:'standby',device_info:{model:'Pi health',serial_port:'/dev/ttyUSB0',protocol:'AA55'},remote_ready:true,free_bytes:1073741824});
+ const allText=node=>node.textContent+' '+node.children.map(allText).join(' '),text=allText(h.el('device-runtime'));
+ assert.match(text,/Pi health/);assert.match(text,/AA55/);assert.match(text,/1.00 GB/);assert.match(text,/未提供/);assert.match(text,/已就绪/);
+ h.ctx.clearManager('signed out');assert.equal(h.el('device-runtime').children.length,0);
+});
 test('different signed-in user clears the editor and credentials before response data',async()=>{
  const h=harness();h.state.user={id:'admin-a'};h.ctx.showCredentials({token:'old-private'});
  h.ctx.fetch=async()=>({headers:{get:()=> 'admin-b'},ok:true,json:async()=>({devices:[]})});
