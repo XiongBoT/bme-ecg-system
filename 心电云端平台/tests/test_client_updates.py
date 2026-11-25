@@ -49,7 +49,7 @@ class ClientUpdateRoutesTests(unittest.TestCase):
         info = client.get('/api/updates')
         self.assertEqual(info.status_code, 200)
         build = info.json()['web']['build_id']
-        for route in ('/', '/devices', '/admin', '/admin/accounts', '/database'):
+        for route in ('/', '/devices', '/admin', '/admin/accounts', '/database', '/tasks', '/operations'):
             page = client.get(route)
             self.assertEqual(page.status_code, 200)
             self.assertIn(f'<meta name="ecg-web-build" content="{build}">', page.text)

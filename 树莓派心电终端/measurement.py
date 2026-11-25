@@ -11,7 +11,7 @@ from xml.sax.saxutils import escape
 import session_management as sessions
 from recording import FS, _readonly_connection, _sync_directory
 
-DURATIONS = {'手动结束': None, '3 分钟': 180, '5 分钟': 300}
+DURATIONS = {'手动结束': None, '1 分钟': 60, '3 分钟': 180, '5 分钟': 300}
 _pdf_lock = threading.Lock()
 
 

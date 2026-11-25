@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1]
 FILES=set(RUNTIME_FILES+TEST_FILES+SUPPORT_FILES)|{
     'device.py','start-device.sh','tools/configure_device_boot.py','tools/preview_device_ui.py',
     'tests/test_device_mode.py','tests/test_device_boot.py','docs/设备待机与日常使用.md',
-    'cloud/__init__.py','cloud/service.py','cloud/uploader.py','cloud/protocol.py',
+    'cloud/__init__.py','cloud/service.py','cloud/uploader.py','cloud/protocol.py','cloud/remote_measurement.py',
     'ui/render_cache.py','ui/cloud_dialog.py','docs/自动连接与云端分析.txt',
     'tests/test_cloud.py','tests/test_cloud_ui.py','tools/ui_latency_probe.py',
     'classification_review.py','tests/test_classification_review.py','tests/test_classification_ui.py',

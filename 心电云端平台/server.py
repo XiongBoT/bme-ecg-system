@@ -32,6 +32,8 @@ from device_store import DeviceStore
 from device_routes import add_routes as add_device_routes
 from database_management import DatabaseManager
 from database_routes import add_routes as add_database_routes
+from workflow_store import WorkflowStore, cancel_record_intents
+from workflow_routes import add_routes as add_workflow_routes
 from maintenance_tasks import MaintenanceQueue
 from admin_console import add_routes as add_admin_console_routes
 from update_routes import add_routes as add_update_routes
@@ -86,6 +88,15 @@ class DetailsInput(StrictModel):
     note: str = Field(default='', max_length=1000)
 
 
+class DeviceInformation(StrictModel):
+    model: str = Field(default='', max_length=100)
+    platform: str = Field(default='', max_length=100)
+    app_version: str = Field(default='', max_length=40)
+    serial_port: str = Field(default='', max_length=100)
+    sample_rate_hz: Literal[360] = 360
+    protocol: str = Field(default='ECG UART 7-byte', max_length=80)
+
+
 class HeartbeatInput(StrictModel):
     state: Literal['standby', 'acquiring', 'saving', 'error']
     owner_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
@@ -97,6 +108,8 @@ class HeartbeatInput(StrictModel):
     free_bytes: int | None = Field(default=None, ge=0)
     pending_uploads: int = Field(default=0, ge=0, le=10000)
     upload_phase: str = Field(default='idle', max_length=40)
+    remote_ready: bool = Field(default=False, strict=True)
+    device_info: DeviceInformation | None = None
 
 
 class LoginInput(StrictModel):
@@ -113,7 +126,7 @@ class AssignInput(StrictModel):
 
 
 class NewPasswordInput(StrictModel):
-    new_password: str = Field(min_length=10, max_length=128)
+    new_password: str = Field(min_length=5, max_length=128)
 
 
 class ChangePasswordInput(NewPasswordInput):
@@ -206,12 +219,15 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     jobs = AnalysisQueue(data, os.getenv('ECG_MODEL', ''))
     database_manager = DatabaseManager(data, lock, lambda: model_service.active_session)
     maintenance = MaintenanceQueue(data)
+    workflow = WorkflowStore(data, jobs, model_service, physiology_service)
     @asynccontextmanager
     async def lifespan(_app):
         if jobs.has_pending(): jobs.start()
         if maintenance.has_pending(): maintenance.start()
+        workflow.start()
         try: yield
         finally:
+            workflow.close()
             maintenance.close()
             jobs.close()
     app = FastAPI(title='心电数据工作台', version='1.1.0', docs_url=None if auth_enabled else '/docs', redoc_url=None, lifespan=lifespan)
@@ -221,13 +237,14 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     app.state.database = database_manager
     app.state.maintenance = maintenance
     updates = add_update_routes(app, ROOT)
+    app.state.workflow = workflow
 
     @app.middleware('http')
     async def guard(request: Request, call_next):
         who = {'kind': 'legacy'}
         if request.url.path.startswith('/api/'):
             public_update = request.method == 'GET' and request.url.path == '/api/updates'
-            if auth_enabled and not public_update and request.url.path not in ('/api/auth/config', '/api/auth/login'):
+            if auth_enabled and not public_update and request.url.path not in ('/api/auth/config', '/api/auth/login', '/api/account-applications'):
                 who = auth.authenticate(request)
                 if who is None:
                     return JSONResponse({'detail': '请先登录'}, status_code=401)
@@ -278,6 +295,11 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     add_device_routes(app,devices,require_admin)
     add_database_routes(app, database_manager, maintenance, require_admin, identity.get)
     add_admin_console_routes(app, data, require_admin, identity.get)
+
+    from health_routes import add_routes as add_health_routes
+    add_health_routes(app, connect, identity, devices, require_device, auth_enabled)
+    from account_applications import add_routes as add_application_routes
+    add_application_routes(app,connect,require_admin,auth_enabled)
 
     @app.get('/api/auth/config')
     def auth_config():
@@ -425,7 +447,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
         with closing(connect()) as db:
             db.execute('SELECT 1').fetchone()
         return {'ok': True, 'service': 'ecg-course-demo', 'device_id': device_id,
-                'deployment': deployment, 'time': now(), 'auth_required': auth_enabled, 'workspace_version': 1, **model_service.identity()}
+                'deployment': deployment, 'time': now(), 'auth_required': auth_enabled, 'workspace_version': 1, 'health_assistant_version': 1, **model_service.identity()}
 
     @app.put('/api/sessions/{session_id}')
     def register(session_id: str, payload: SessionInput):
@@ -548,6 +570,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
                 sample_count=row['sample_count'], real_count=real_count, valid_real_count=valid_real_count)
             meta['source_status'] = payload.source_status
             db.execute('UPDATE sessions SET complete=1, metadata=? WHERE id=?', (json.dumps(meta), session_id))
+            workflow.completed(db, row)
             return summary(db, find_session(db, session_id))
 
     @app.get('/api/sessions')
@@ -606,6 +629,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
                         raise HTTPException(409, '请等待上传和分析完成后再移入回收站')
                     db.execute('INSERT INTO session_details(session_id,trashed_at) VALUES(?,?) ON CONFLICT(session_id) '
                                'DO UPDATE SET trashed_at=excluded.trashed_at', (session_id, now()))
+                    cancel_record_intents(db, session_id)
                     return summary(db, item)
             finally: compute.release()
 
@@ -673,8 +697,10 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
             digest = model_service.digest(metadata, item['complete'], manifest)
             cached = model_service.read(session_id, digest)['analysis_status'] in ('complete','ineligible')
             total = item['sample_count']
+            if total > 1000000: raise HTTPException(409, '心搏分类暂仅支持不超过 100 万采样点的记录')
             db.rollback()
-            try: job = jobs.enqueue(session_id, digest, total, force=force, cached=cached, authorize=authorize)
+            try: job = jobs.enqueue(session_id, digest, total, force=force, cached=cached, authorize=authorize,
+                                   on_enqueued=lambda db, job: workflow.submitted(db, session_id, 'model', job))
             except QueueFull as exc: raise HTTPException(429, str(exc)) from exc
             except ValueError as exc: raise HTTPException(409, str(exc)) from exc
         jobs.start()
@@ -717,7 +743,8 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
             digest = physiology_service.digest(metadata, item['complete'], manifest)
             cached = physiology_service.read(session_id, digest)['analysis_status'] in ('complete','ineligible')
             db.rollback()
-            try: job = jobs.enqueue(session_id, digest, total, force=force, cached=cached, authorize=authorize, kind='physiology')
+            try: job = jobs.enqueue(session_id, digest, total, force=force, cached=cached, authorize=authorize, kind='physiology',
+                                   on_enqueued=lambda db, job: workflow.submitted(db, session_id, 'physiology', job))
             except QueueFull as exc: raise HTTPException(429, str(exc)) from exc
             except ValueError as exc: raise HTTPException(409, str(exc)) from exc
         jobs.start()
@@ -802,7 +829,17 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
         return Response(out.getvalue().encode('utf-8-sig'), media_type='text/csv; charset=utf-8',
                         headers={'Content-Disposition': f'attachment; filename="{session_id}.csv"'})
 
+    add_workflow_routes(app, workflow, identity.get, find_session, require_admin)
+
     app.mount('/assets', StaticFiles(directory=ROOT / 'web'), name='assets')
+
+    @app.get('/tasks')
+    def tasks_page():
+        return updates.page('tasks.html')
+
+    @app.get('/operations')
+    def operations_page():
+        return updates.page('operations.html')
 
     @app.get('/downloads/{filename}')
     def desktop_download(filename: str):

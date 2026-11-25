@@ -50,6 +50,13 @@ class DeviceStore:
                       legacy_shared=bool(row['legacy_shared']))
         if admin:
             result['user_ids']=[r[0] for r in db.execute('SELECT user_id FROM device_users WHERE device_id=? ORDER BY user_id',(row['id'],))]
+            beat=db.execute('SELECT seen,payload FROM device_heartbeats WHERE device_id=?',(row['id'],)).fetchone()
+            payload=json.loads(beat['payload']) if beat else {}
+            result.update(created_at=row['created_at'], last_seen=beat['seen'] if beat else None,
+                          connection=('disabled' if not row['active'] else 'unknown' if not beat else 'online' if time.time()-beat['seen']<=35 else 'offline'),
+                          device_info=payload.get('device_info'), free_bytes=payload.get('free_bytes'),
+                          remote_ready=bool(payload.get('remote_ready')) and bool(beat) and time.time()-beat['seen']<=35)
+            result['record_count']=db.execute('SELECT COUNT(*) FROM sessions WHERE ingest_device_id=?',(row['id'],)).fetchone()[0]
         return result
 
     def list(self, principal=None, admin=False):

@@ -37,7 +37,9 @@ class WorkspaceStore:
         age = max(0, time.time()-row['seen'])
         result = {**json.loads(row['payload']), 'connection': 'online' if age <= 35 else 'offline',
                   'last_seen': row['seen'], 'age_seconds': round(age, 1)}
+        if not principal or not principal.get('is_admin'):result.pop('device_info',None)
         if age > 35:
+            result['remote_ready']=False
             result.update(state='unknown', signal_state='unknown', signal_text='', session_id=None)
         if principal and principal.get('kind') == 'user' and result.get('owner_id') != principal['id']:
             result.update(state=('standby' if result['state']=='standby' else 'other_user') if age <= 35 else 'unknown', signal_state='unknown',

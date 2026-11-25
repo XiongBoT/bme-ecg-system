@@ -1,6 +1,7 @@
 """Bounded administrator metadata; no signal values, model output or credentials."""
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
+import json
 import shutil
 import time
 from typing import Annotated, Literal
@@ -94,6 +95,17 @@ class AdminConsole:
                 if not items: raise HTTPException(404, '设备不存在')
                 item = items[0]
                 item['user_ids'] = [r[0] for r in db.execute('SELECT user_id FROM device_users WHERE device_id=? ORDER BY user_id', (did,))]
+                beat = db.execute('SELECT payload FROM device_heartbeats WHERE device_id=?', (did,)).fetchone()
+                try:
+                    payload = json.loads(beat['payload']) if beat else {}
+                except (ValueError, TypeError):
+                    payload = {}
+                if not isinstance(payload, dict): payload = {}
+                info = payload.get('device_info')
+                item['device_info'] = {k: info[k] for k in ('model','platform','app_version','serial_port','sample_rate_hz','protocol')
+                                       if k in info} if isinstance(info, dict) else {}
+                item['free_bytes'] = payload.get('free_bytes')
+                item['remote_ready'] = item['connection']=='online' and item['state']=='standby' and bool(payload.get('remote_ready'))
                 records = db.execute('''SELECT s.id session_id,COALESCE(sd.name,'') name,s.complete,s.created_at,s.received_at
                     FROM sessions s LEFT JOIN session_details sd ON sd.session_id=s.id
                     WHERE s.ingest_device_id=? AND sd.trashed_at IS NULL

@@ -36,6 +36,9 @@ function drawDeviceEditor(d=null){
  if(d){
   el('device-runtime').append(deviceTools.node('strong',(deviceConnections[d.connection]||'状态未知')+' · '+(deviceStates[d.state]||'当前状态未知')),
    deviceTools.node('p','配置：'+(d.active?'已启用':'已停用')+' · 最近上报 '+deviceTools.date(d.last_seen)),deviceTools.node('p','最近上传活动 '+deviceTools.date(d.last_upload_at)));
+  const facts=deviceTools.node('dl','','device-facts'),info=d.device_info||{};
+  for(const [label,value]of [['接入时间',deviceTools.date(d.created_at)],['硬件型号',info.model||'未提供'],['系统',info.platform||'未提供'],['终端版本',info.app_version||'未提供'],['串口',info.serial_port||'未选择'],['采样率',info.sample_rate_hz?info.sample_rate_hz+' Hz':'未提供'],['协议',info.protocol||'未提供'],['剩余空间',Number.isFinite(d.free_bytes)?(d.free_bytes/1073741824).toFixed(2)+' GB':'未提供'],['记录数量',d.record_count??'未知'],['手机发起测量',d.remote_ready?'已就绪':'未就绪']]){const pair=deviceTools.node('div','');pair.append(deviceTools.node('dt',label),deviceTools.node('dd',String(value)));facts.append(pair);}
+  el('device-runtime').append(facts);
   const link=deviceTools.node('a','查看此设备的记录信息');link.href=deviceTools.link('/database',{device_id:d.device_id});el('device-runtime').append(link);
  }
  for(const u of manager.users){
