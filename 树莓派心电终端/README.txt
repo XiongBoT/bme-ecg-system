@@ -6,7 +6,7 @@
 
 终端导航（https://github.com/XiongBoT/bme-ecg-system/blob/main/树莓派心电终端/README.md） · 使用说明（https://github.com/XiongBoT/bme-ecg-system/blob/main/树莓派心电终端/docs/使用说明.md） · 故障排查（https://github.com/XiongBoT/bme-ecg-system/blob/main/树莓派心电终端/docs/故障排查.md）
 
-本文说明仓库当前代码的安装与启动。板上是否已安装相同版本，另查设备阶段记录（https://github.com/XiongBoT/bme-ecg-system/blob/main/树莓派心电终端/docs/设备待机与日常使用.md）；本轮文档整理不部署设备。
+本文说明仓库当前代码的安装与启动。板上是否已安装相同版本，先查交付状态（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/版本与交付状态.md）并核对设备实际版本；设备阶段记录（https://github.com/XiongBoT/bme-ecg-system/blob/main/树莓派心电终端/docs/设备待机与日常使用.md）保留历史证据；本轮文档整理不部署设备。
 
 ## 安装依赖
 
@@ -52,6 +52,10 @@ python3 app.py --headless --demo --duration 10 --summary evidence/demo-10s-summa
 
 若账号没有串口权限，按实际用户名加入 `dialout` 组后重新登录。`--port auto` 仅在存在唯一 USB 串口时选择它。
 
+## 接入云端和手机
+
+按账号与记录归属（https://github.com/XiongBoT/bme-ecg-system/blob/main/树莓派心电终端/docs/云端账号与记录归属.txt）配置 HTTPS 地址及本设备凭据，管理员分配使用者授权。手机登录同一平台的本人账号。当前终端支持手动和 1／3／5 分钟；手机发起测量还要求云端提供健康助手接口、终端空闲且真实串口就绪，见手机测量步骤（https://github.com/XiongBoT/bme-ecg-system/blob/main/树莓派心电终端/docs/使用说明.md#手机发起固定时长测量）。
+
 ## 升级与开发
 
 当前完整工作台包由 `python tools/package_cloud_workspace.py` 构建，输出 `dist/ecg-cloud-workspace.tar.gz`。构建不安装、不部署；历史 `build_cardioedge_release.py` 和固定哈希安装工具不用于当前完整工作台升级。
@@ -65,12 +69,20 @@ python3 app.py --headless --demo --duration 10 --summary evidence/demo-10s-summa
 ## 完成一次测量
 
 1. 在待机界面接入 USB 串口；多个设备时明确选择采集端口。
-2. 点击“开始采集”，核对使用者、端口、可用空间和云端状态，选择手动结束、3 分钟或 5 分钟。取消准备窗口不会建立记录。
+2. 点击“开始采集”，核对使用者、端口、可用空间和云端状态，选择手动结束、1 分钟、3 分钟或 5 分钟。取消准备窗口不会建立记录。
 3. 观察接收点数、信号质量与保存状态。“暂停显示”只冻结画面，采集和保存继续。
 4. 点击“停止并保存”，或等待所选时长结束；等到保存完成后查看测量总结。
 5. 在历史记录中复核、导出 CSV/ZIP 或中文 PDF；确认云端授权后可以手动上传并查看分析。
 
 设备待机、总结和安全关机的详细行为及待验收项见设备待机与日常使用（https://github.com/XiongBoT/bme-ecg-system/blob/main/树莓派心电终端/docs/设备待机与日常使用.md#日常使用）。源码具备相应功能不代表板端已经升级。
+
+## 手机发起固定时长测量
+
+云端和终端均更新后，终端联网并保持真实串口模式的空闲状态；管理员先给本人账号分配设备。手机“开始测量”选择就绪设备与 1／3／5 分钟，确认人在设备旁、电极已准备，再发起请求。
+
+终端领取请求后计时、保存和上传。手机断网或关闭页面不会停止已开始的测量；提前结束使用终端停止按钮。45 秒未领取的请求过期，终端重启不自动重复采集。上传失败保留本地记录，排除问题后在终端补传。
+
+测量总结中的采样时长按实际保存点数计算；选了 3 分钟但提前停止或发生断流，不能把报告视作完整 3 分钟数据。详情与报告见健康助手（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/心电健康助手.md）。
 
 ## 来源、波形与分类
 
@@ -109,6 +121,18 @@ python3 app.py --headless --demo --duration 10 --summary evidence/demo-10s-summa
 | PDF 提示缺少中文字体 | 安装 `python3-reportlab fonts-wqy-microhei`，或将 `ECG_REPORT_FONT` 指向有效中文字体文件 |
 | 空间不足或保存失败 | 查看存储状态，停止后检查数据目录权限；导出并确认备份后再人工管理记录，不删除原始目录来消除提示 |
 | 上传后手机看不到记录 | 确认上传完成、设备授权、记录归属及登录账号；源记录保存成功不代表云端已收到或分析完成 |
+
+## 手机发起测量
+
+| 现象 | 检查顺序 |
+| --- | --- |
+| 手机找不到设备或显示未就绪 | 检查本人设备授权、独立凭据、云端地址、终端版本；终端应联网空闲并选择真实串口，近 35 秒有心跳 |
+| 请求过期，没有开始采集 | 请求 45 秒未领取即过期；修复终端连接后重新发起，不重放旧请求 |
+| 手机关闭后仍在采集 | 计时由终端执行；在终端停止并等待保存 |
+| 重启后提示采集中断 | 为避免重复测量不会自动重启采集；先检查本地记录与保存结果，再重新发起 |
+| 上传失败，手机没有报告 | 本地记录保留；核对账号、凭据和网络后在终端重试上传，不修改旧记录归属 |
+
+更多状态见健康助手说明（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/心电健康助手.md）和云端排查（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/故障排查.md）。
 
 ## HDMI 黑屏
 
