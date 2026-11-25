@@ -58,3 +58,4 @@
   #report-dialog:before{content:'心电测量记录';display:block;font-size:24px;font-weight:bold;margin-bottom:16px}
   .report-table tr,#report-wave{break-inside:avoid}
 }
+#review-panel{padding:20px}#review-panel form{display:grid;gap:12px}#review-panel label{display:grid;gap:6px}#review-panel textarea{width:100%;resize:vertical;min-height:80px;font:inherit;border:1px solid #c8dcd2;border-radius:8px;padding:10px}#review-panel .primary{justify-self:start}#review-feedback{overflow-wrap:anywhere}

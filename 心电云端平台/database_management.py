@@ -12,6 +12,7 @@ import uuid
 
 from fastapi import HTTPException
 from analysis_tasks import FileLock
+from workflow_store import cancel_record_intents
 
 SESSION_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,95}\Z')
 
@@ -130,6 +131,7 @@ class DatabaseManager:
                     stamp = datetime.now(timezone.utc).isoformat() if trashed else None
                     db.execute('INSERT INTO session_details(session_id,trashed_at) VALUES(?,?) '
                         'ON CONFLICT(session_id) DO UPDATE SET trashed_at=excluded.trashed_at', (sid, stamp))
+                    if trashed: cancel_record_intents(db, sid)
                     audit(db, actor, 'trash' if trashed else 'restore', sid)
                     return {'ok': True, 'session_id': sid, 'trashed_at': stamp}
             finally: compute.release()
