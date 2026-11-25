@@ -11,6 +11,7 @@ import time
 from analysis_tasks import FileLock
 from database_management import connect, audit
 from database_backup import scan_storage, check_snapshot, create_backup, cleanup_interrupted
+from backup_schedule import scheduled_job_started
 
 
 class Stopped(Exception): pass
@@ -37,7 +38,9 @@ def worker(data, stop):
             with closing(connect(data)) as db, db:
                 row = db.execute("SELECT * FROM management_jobs WHERE status='queued' ORDER BY created LIMIT 1").fetchone()
                 if row:
-                    db.execute("UPDATE management_jobs SET status='running',stage='开始处理',updated=? WHERE job_id=?", (time.time(), row['job_id']))
+                    now = time.time()
+                    db.execute("UPDATE management_jobs SET status='running',stage='开始处理',updated=? WHERE job_id=?", (now, row['job_id']))
+                    scheduled_job_started(db, row['job_id'], now)
             if row is None: stop.wait(.3); continue
             job = dict(row)
             last_update = 0

@@ -34,6 +34,8 @@ from database_management import DatabaseManager
 from database_routes import add_routes as add_database_routes
 from workflow_store import WorkflowStore, cancel_record_intents
 from workflow_routes import add_routes as add_workflow_routes
+from annotations import add_routes as add_annotation_routes
+from backup_schedule import BackupSchedule, add_routes as add_backup_schedule_routes
 from maintenance_tasks import MaintenanceQueue
 from admin_console import add_routes as add_admin_console_routes
 from update_routes import add_routes as add_update_routes
@@ -219,15 +221,18 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     jobs = AnalysisQueue(data, os.getenv('ECG_MODEL', ''))
     database_manager = DatabaseManager(data, lock, lambda: model_service.active_session)
     maintenance = MaintenanceQueue(data)
+    backup_schedule = BackupSchedule(data, maintenance)
     workflow = WorkflowStore(data, jobs, model_service, physiology_service)
     @asynccontextmanager
     async def lifespan(_app):
         if jobs.has_pending(): jobs.start()
         if maintenance.has_pending(): maintenance.start()
         workflow.start()
+        backup_schedule.start()
         try: yield
         finally:
             workflow.close()
+            backup_schedule.close()
             maintenance.close()
             jobs.close()
     app = FastAPI(title='心电数据工作台', version='1.1.0', docs_url=None if auth_enabled else '/docs', redoc_url=None, lifespan=lifespan)
@@ -238,6 +243,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     app.state.maintenance = maintenance
     updates = add_update_routes(app, ROOT)
     app.state.workflow = workflow
+    app.state.backup_schedule = backup_schedule
 
     @app.middleware('http')
     async def guard(request: Request, call_next):
@@ -294,6 +300,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
 
     add_device_routes(app,devices,require_admin)
     add_database_routes(app, database_manager, maintenance, require_admin, identity.get)
+    add_backup_schedule_routes(app, backup_schedule, require_admin, identity.get)
     add_admin_console_routes(app, data, require_admin, identity.get)
 
     from health_routes import add_routes as add_health_routes
@@ -830,6 +837,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
                         headers={'Content-Disposition': f'attachment; filename="{session_id}.csv"'})
 
     add_workflow_routes(app, workflow, identity.get, find_session, require_admin)
+    add_annotation_routes(app, connect, identity.get, find_session)
 
     app.mount('/assets', StaticFiles(directory=ROOT / 'web'), name='assets')
 
