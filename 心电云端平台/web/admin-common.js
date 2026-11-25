@@ -56,7 +56,8 @@ window.AdminUI=(()=>{
    for(const [id,label,href,icon] of items){
     const a=node('a',''),symbol=document.createElementNS('http://www.w3.org/2000/svg','svg'),shape=document.createElementNS('http://www.w3.org/2000/svg','path');
     symbol.setAttribute('viewBox','0 0 24 24');symbol.setAttribute('class','admin-nav-icon');symbol.setAttribute('aria-hidden','true');symbol.setAttribute('focusable','false');shape.setAttribute('d',iconPaths[icon]);symbol.append(shape);
-    a.append(symbol,node('span',label));a.href=href;links.push([id,a]);destinations.append(a);
+    // Stay in this document so section links retain filters and unsaved forms.
+    a.append(symbol,node('span',label));a.href=document.body.dataset.adminSection==='records'&&href.startsWith('/database')?(href.slice('/database'.length)||'#db-records-section'):href;links.push([id,a]);destinations.append(a);
    }
    group.append(destinations);nav.append(group);
   }
