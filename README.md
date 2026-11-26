@@ -129,6 +129,7 @@ Windows 完整解压后运行“心电工作台.exe”，无需安装 Python 或
 | [硬件 / STM32 心电采集](硬件/STM32心电采集/README.md) | 固件、HAL/CMSIS、Keil 工程及接线资料 |
 | [树莓派心电终端](树莓派心电终端/README.md) | 串口接收、屏幕显示、记录、端侧分析与上传 |
 | [心电云端平台](心电云端平台/README.md) | 服务端、网页、账号设备管理、客户端与部署工具 |
+| [heartlife（心伴）](heartlife/README.md) | 独立适老化健康生活记录、习惯计划、健康百科与同伴互助社区（附腾讯云部署方案） |
 | [docs](docs/README.md) | 共同接口、系统指南、项目计划与公开数据评测 |
 | [tools](tools/README.md) | 仓库级检查工具 |
 
