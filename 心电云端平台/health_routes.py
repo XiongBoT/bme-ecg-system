@@ -11,6 +11,19 @@ from fastapi import HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 
+TREND_INDEX = 'sessions_owner_started_serial_complete'
+TREND_INDEX_SQL = '''CREATE INDEX IF NOT EXISTS sessions_owner_started_serial_complete
+    ON sessions(owner_id, julianday(json_extract(metadata,'$.started_utc')))
+    WHERE complete=1 AND json_extract(metadata,'$.source')='serial' '''
+TREND_QUERY = """SELECT s.metadata,s.sample_count,m.details FROM sessions s
+    LEFT JOIN session_details d ON d.session_id=s.id
+    LEFT JOIN measurement_summaries m ON m.session_id=s.id
+    WHERE s.owner_id=? AND s.complete=1 AND d.trashed_at IS NULL
+    AND json_extract(s.metadata,'$.source')='serial'
+    AND julianday(json_extract(s.metadata,'$.started_utc'))>=julianday(?)
+    AND julianday(json_extract(s.metadata,'$.started_utc'))<julianday(?)"""
+
+
 class MeasurementRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     device_id: str = Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$')
@@ -36,6 +49,11 @@ def initialize(connect):
             UNIQUE(owner_id, request_key));
         CREATE INDEX IF NOT EXISTS measurement_device_status ON measurement_requests(device_id,status);
         ''')
+        # Match the query's UTC conversion exactly: ISO offsets cannot be sorted
+        # lexicographically. SQLite maintains this partial index on writes, so
+        # completion/ownership changes need no application-side cache invalidation.
+        db.execute(TREND_INDEX_SQL)
+        db.commit()
 
 
 def period_bounds(period, anchor, offset):
@@ -92,14 +110,7 @@ def add_routes(app, connect, identity, devices, require_device, auth_enabled):
         buckets = [dict(index=i, label=(f'{i:02d}:00' if period=='day' else str(i+1)), records=0,
                         duration_s=0., hr_mean=None, hr_records=0, _weight=0., _sum=0.) for i in range(count)]
         with closing(connect()) as db:
-            rows = db.execute("SELECT s.metadata,s.sample_count,m.details FROM sessions s "
-                              "LEFT JOIN session_details d ON d.session_id=s.id "
-                              "LEFT JOIN measurement_summaries m ON m.session_id=s.id "
-                              "WHERE s.owner_id=? AND s.complete=1 AND d.trashed_at IS NULL "
-                              "AND json_extract(s.metadata,'$.source')='serial' "
-                              "AND julianday(json_extract(s.metadata,'$.started_utc'))>=julianday(?) "
-                              "AND julianday(json_extract(s.metadata,'$.started_utc'))<julianday(?)",
-                              (who['id'], start.isoformat(), end.isoformat()))
+            rows = db.execute(TREND_QUERY, (who['id'], start.isoformat(), end.isoformat()))
             for row in rows:
                 meta = json.loads(row['metadata'])
                 stamp = datetime.fromisoformat(meta['started_utc'].replace('Z','+00:00')).astimezone(start.tzinfo)
