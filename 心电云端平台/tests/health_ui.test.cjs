@@ -13,7 +13,7 @@ function harness(module){
   element('login-panel').hidden=true;
   const state={ready:false,epoch:1,user:null},context=vm.createContext({$:element,state,document,window:{},navigator:{},location:{},
     ECGHealth:require('../web/health_core.js'),localStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)},
-    setInterval:()=>1,clearInterval(){},AbortSignal,URLSearchParams,console,confirm:()=>true,notice(){},fetch:async()=>({json:async()=>({health_assistant_version:1})})});
+    setInterval:()=>1,clearInterval(){},AbortSignal,URLSearchParams,crypto:require('node:crypto').webcrypto,console,confirm:()=>true,notice(){},fetch:async()=>({ok:true,json:async()=>({health_assistant_version:1})})});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../web',module),'utf8'),context);
   return {element,state,context,stored};
 }
@@ -53,4 +53,48 @@ test('remember username never writes password to web storage',async()=>{
   assert.equal(JSON.parse(h.stored.get('ecg-health-account-v1')).username,'alice');
   assert.ok(!JSON.stringify([...h.stored]).includes('private-test-password'));
   h.context.HealthAssistant.forget();assert.equal(h.stored.size,0);
+});
+
+const device={device_id:'pi',name:'终端',active:true,connection:'online',state:'standby',remote_ready:true};
+async function measurementHarness(){
+  const h=harness('health.js');h.state.ready=true;h.state.user={username:'alice'};
+  h.context.api=async path=>({json:async()=>path==='/api/devices'?{devices:[device]}:{measurements:[]}});
+  await h.context.HealthAssistant.ready();return h;
+}
+test('device readiness distinguishes disabled, offline, busy and legacy terminals',()=>{
+  const {readiness}=require('../web/health_core.js');assert.equal(readiness(device).ready,true);
+  for(const [change,label] of [[{active:false},'已停用'],[{connection:'offline'},'离线'],[{state:'recording'},'忙碌中'],[{remote_ready:false},'尚未准备好']]){
+    const result=readiness({...device,...change});assert.equal(result.ready,false);assert.equal(result.label,label);
+  }
+});
+test('old device response cannot replace a reopened dialog',async()=>{
+  const h=await measurementHarness();let finish;
+  h.context.api=async path=>({json:()=>path==='/api/devices'?new Promise(r=>finish=r):Promise.resolve({measurements:[]})});
+  const old=h.element('health-measure-open').onclick();await Promise.resolve();h.element('measurement-close').onclick();
+  h.context.api=async()=>({json:async()=>({devices:[],measurements:[]})});
+  await h.element('health-measure-open').onclick();finish({devices:[device]});await old;
+  assert.equal(h.element('measurement-device').children.length,0);assert.match(h.element('measurement-feedback').textContent,/没有获授权/);
+  assert.equal(h.element('measurement-start').disabled,true);
+});
+test('uncertain retry preserves parameters across reopen and ignores double submit',async()=>{
+  const h=await measurementHarness();await h.element('health-measure-open').onclick();h.element('measurement-confirm').checked=true;
+  const calls=[];let reject;
+  h.context.jsonRequest=async(_,method,payload)=>{calls.push(payload);return new Promise((_,r)=>reject=r);};
+  const submit=()=>h.element('measurement-form').onsubmit({preventDefault(){}});
+  const first=submit();await submit();assert.equal(calls.length,1);reject(new Error('timeout'));await first;
+  h.element('measurement-close').onclick();await h.element('health-measure-open').onclick();
+  assert.equal(h.element('measurement-duration').disabled,true);
+  h.element('measurement-duration').value='60';h.element('measurement-confirm').checked=true;
+  h.context.jsonRequest=async(_,method,payload)=>{calls.push(payload);return {id:'task1'};};
+  await submit();assert.deepEqual(calls[0],calls[1]);assert.equal(calls[1].duration_s,180);
+  assert.equal(h.element('measurement-duration').disabled,false);
+});
+test('rejected request releases parameters and uploaded task does not imply finished report',async()=>{
+  const h=await measurementHarness();await h.element('health-measure-open').onclick();h.element('measurement-confirm').checked=true;
+  h.context.jsonRequest=async()=>{throw Object.assign(new Error('设备离线'),{status:409});};
+  await h.element('measurement-form').onsubmit({preventDefault(){}});
+  assert.equal(h.element('measurement-duration').disabled,false);assert.match(h.element('measurement-feedback').textContent,/未接受/);
+  h.context.api=async path=>({json:async()=>path==='/api/devices'?{devices:[device]}:{measurements:[{id:'old',duration_s:60,status:'completed',message:'上传完成',session_id:'record'}]}});
+  await h.context.HealthAssistant.ready();await new Promise(resolve=>setImmediate(resolve));
+  assert.match(h.element('measurement-tasks').children[0].children[0].textContent,/记录已上传/);
 });
