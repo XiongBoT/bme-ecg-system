@@ -9,6 +9,8 @@ import uuid
 
 from fastapi import HTTPException
 
+from heartlife_bridge import revoke_owner as revoke_heartlife_owner
+
 COOKIE = 'ecg_session'
 SESSION_SECONDS = 8 * 3600
 
@@ -107,6 +109,7 @@ class AuthStore:
             db.execute('UPDATE users SET password_hash=? WHERE id=?', (encoded, uid))
             db.execute('DELETE FROM browser_sessions WHERE user_id=?', (uid,))
             db.execute('DELETE FROM login_attempts WHERE bucket=?', (bucket,))
+            revoke_heartlife_owner(db, uid)
 
     @staticmethod
     def managed_user(db, uid):
@@ -124,6 +127,7 @@ class AuthStore:
             count = db.execute('SELECT COUNT(*) FROM browser_sessions WHERE user_id=? AND expires>?',
                                (uid, time.time())).fetchone()[0]
             db.execute('DELETE FROM browser_sessions WHERE user_id=?', (uid,))
+            revoke_heartlife_owner(db, uid)
             return {'revoked_sessions': count}
 
     def manage_user(self, uid, *, active=None, new_password=None):
@@ -139,6 +143,7 @@ class AuthStore:
                 db.execute('UPDATE users SET password_hash=? WHERE id=?', (encoded, uid))
             if encoded is not None or active is False:
                 db.execute('DELETE FROM browser_sessions WHERE user_id=?', (uid,))
+                revoke_heartlife_owner(db, uid)
             return self.public(db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone())
 
     def login(self, username, password, client):

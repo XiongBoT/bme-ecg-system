@@ -53,6 +53,18 @@ test('switching account clears text, device status, forms and pagination before 
   assert.equal(h.element('qrs-count').textContent,'—');assert.equal(h.element('physiology-analyze').disabled,true);
   assert.ok(!h.element('device-signal').textContent.includes('Alice'));assert.equal(h.state.user,null);
 });
+
+test('HeartLife entry appears only for a configured personal login and clears on logout',()=>{
+  const h=harness();h.context.refresh=()=>{};h.state.auth=true;
+  h.context.enterWorkspace({user:{id:'alice',username:'alice'}});
+  assert.equal(h.element('account-heartlife-group').hidden,true);
+  h.state.heartlifeUrl='https://example.test/heartlife/';
+  h.context.enterWorkspace({user:{id:'alice',username:'alice'}});
+  assert.equal(h.element('account-heartlife-group').hidden,false);
+  assert.equal(h.element('heartlife-entry').href,'https://example.test/heartlife/');
+  h.context.showLogin();assert.equal(h.element('account-heartlife-group').hidden,true);
+  h.context.enterWorkspace();assert.equal(h.element('account-heartlife-group').hidden,true);
+});
 test('late 401 body cannot log out a newer account',async()=>{
   const h=harness();h.state.auth=true;h.state.user={id:'alice'};
   let resolveBody,headersSeen;

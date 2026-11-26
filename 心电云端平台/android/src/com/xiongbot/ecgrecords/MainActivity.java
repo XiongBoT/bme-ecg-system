@@ -137,7 +137,7 @@ public final class MainActivity extends Activity {
         final String cookie=CookieManager.getInstance().getCookie(WebPolicy.ORIGIN);
         // Only read an already-visible snapshot. No server text is interpolated into JS.
         web.evaluateJavascript("typeof UserExperience==='undefined'?null:UserExperience.printDocument()", encoded -> {
-            if(isFinishing() || isDestroyed() || !WebPolicy.trusted(web.getUrl()) || cookie==null ||
+            if(isFinishing() || isDestroyed() || !WebPolicy.recordPage(web.getUrl()) || cookie==null ||
                 !cookie.equals(CookieManager.getInstance().getCookie(WebPolicy.ORIGIN)))return;
             try {
                 Object result=new JSONTokener(encoded).nextValue();
@@ -148,8 +148,7 @@ public final class MainActivity extends Activity {
     }
 
     private boolean loginOrigin(){
-        if(web==null||!WebPolicy.trusted(web.getUrl()))return false;
-        String path=Uri.parse(web.getUrl()).getPath();return "/".equals(path)||"/index.html".equals(path);
+        return web!=null&&WebPolicy.recordPage(web.getUrl());
     }
     private void credentialCommand(String action){
         if(!loginOrigin())return;
@@ -224,11 +223,11 @@ public final class MainActivity extends Activity {
                 return true;
             }
             if (request.isForMainFrame() && "ecg-report".equals(uri.getScheme()) && "print".equals(uri.getHost())) {
-                if (WebPolicy.trusted(view.getUrl()) && request.hasGesture()) printReport();
+                if (WebPolicy.recordPage(view.getUrl()) && request.hasGesture()) printReport();
                 return true;
             }
             if (request.isForMainFrame() && "ecg-export".equals(uri.getScheme()) && "download".equals(uri.getHost())) {
-                if (WebPolicy.trusted(view.getUrl()) && request.hasGesture()) prepareExport(uri);
+                if (WebPolicy.recordPage(view.getUrl()) && request.hasGesture()) prepareExport(uri);
                 else Toast.makeText(MainActivity.this,"请直接点击记录页的下载按钮",Toast.LENGTH_LONG).show();
                 return true;
             }
@@ -238,6 +237,11 @@ public final class MainActivity extends Activity {
                 return true;
             }
             if (WebPolicy.trusted(uri.toString())) return false;
+            if (request.isForMainFrame() && request.hasGesture() && WebPolicy.trusted(view.getUrl()) && WebPolicy.externalPage(uri.toString())) {
+                try {startActivity(new Intent(Intent.ACTION_VIEW,uri));}
+                catch(Exception e) {Toast.makeText(MainActivity.this,"请使用系统浏览器打开此链接",Toast.LENGTH_LONG).show();}
+                return true;
+            }
             Toast.makeText(MainActivity.this, "此链接不属于项目服务器", Toast.LENGTH_SHORT).show();
             return true;
         }

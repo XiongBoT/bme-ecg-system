@@ -8,6 +8,7 @@ import {
   Circle,
   Clock,
   Footprints,
+  HeartPulse,
   MoonStar,
   NotebookPen,
   Smile,
@@ -197,7 +198,7 @@ onMounted(() => {
           </RouterLink>
 
           <button
-            v-if="auth.safeEcgExternalUrl"
+            v-if="auth.safeEcgExternalUrl && !auth.publicConfig.ecg_integration_enabled"
             type="button"
             class="btn btn-soft"
             @click="ecgModalOpen = true"
@@ -217,6 +218,14 @@ onMounted(() => {
           class="hl-hero-illustration"
         />
       </div>
+    </section>
+
+    <section v-if="auth.publicConfig.ecg_integration_enabled" class="hl-card row-between" aria-label="心电记录入口">
+      <div class="stack-sm">
+        <div class="row-wrap"><HeartPulse :size="22" aria-hidden="true" /><h2 class="section-title">我的心电记录</h2></div>
+        <p class="hl-muted text-sm" style="margin: 0">查看本人测量摘要、心率趋势与报告入口。</p>
+      </div>
+      <RouterLink to="/ecg" class="btn btn-secondary">查看心电记录</RouterLink>
     </section>
 
     <HlAlert v-if="actionError" variant="error">

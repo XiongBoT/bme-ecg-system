@@ -156,10 +156,39 @@ jobs:
       - name: Build and verify APK with an ephemeral CI key
         run: python '心电云端平台/android/build.py' --sdk "$ANDROID_HOME" --jdk "$JAVA_HOME_17_X64" --build-root "$RUNNER_TEMP/android-build"
 
+  heartlife:
+    name: HeartLife integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install backend and integration dependencies
+        run: python -m pip install -r heartlife/backend/requirements.txt -r '心电云端平台/requirements-model.txt'
+      - name: Test HeartLife and the real ECG bridge contract
+        working-directory: heartlife/backend
+        run: python -m pytest -q
+      - name: Install frontend dependencies
+        working-directory: heartlife/frontend
+        run: npm ci
+      - name: Test frontend and build the shared-site entry
+        working-directory: heartlife/frontend
+        run: |
+          npm run test -- --run
+          VITE_BASE_PATH=/heartlife/ npm run build
+
   gate:
     name: Quality gate
     if: ${{ always() }}
-    needs: [source, python, research, web, desktop, android]
+    needs: [source, python, research, web, desktop, android, heartlife]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

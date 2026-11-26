@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
+  // Root deployment remains supported; the existing ECG site uses /heartlife/.
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [vue(), tailwindcss()],
   resolve: {
     alias: {

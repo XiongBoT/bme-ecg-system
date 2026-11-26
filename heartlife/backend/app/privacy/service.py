@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable
 import json
-from sqlalchemy import delete, desc, or_, select, update
+from sqlalchemy import delete, desc, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.clock import Clock
@@ -15,6 +15,7 @@ from app.db.models import (
     ChallengeMembership,
     Checkin,
     Comment,
+    EcgLink,
     FamilyGrant,
     FamilyInvite,
     JournalEntry,
@@ -141,22 +142,35 @@ def export_user_data(db: Session, user: User, clock: Clock) -> dict:
     }
 
 
-def delete_user_account_atomic(
-    db: Session,
-    user: User,
-    payload: DeleteAccountRequest,
-    clock: Clock,
-) -> None:
+def validate_account_deletion(user: User, payload: DeleteAccountRequest) -> None:
     if payload.confirm_text != "DELETE":
         raise AppError(422, "CONFIRM_TEXT_INVALID", "请输入大写 DELETE 以确认注销账号")
 
     if not verify_password(payload.password, user.password_hash):
         raise AppError(401, "INVALID_PASSWORD", "当前登录密码校验未通过")
 
+
+def delete_user_account_atomic(
+    db: Session,
+    user: User,
+    payload: DeleteAccountRequest,
+    clock: Clock,
+) -> None:
+    validate_account_deletion(user, payload)
+
     uid = user.id
     now = clock.now()
 
     try:
+        # Serialize with binding reservation. No external HTTP call is made here.
+        db.rollback()
+        db.execute(text("BEGIN IMMEDIATE"))
+        db.refresh(user)
+        if user.status != "active":
+            raise AppError(401, "UNAUTHORIZED", "账号已失效")
+        validate_account_deletion(user, payload)
+        if db.get(EcgLink, uid) is not None:
+            raise AppError(409, "ECG_LINK_CHANGED", "心电关联状态已改变，请先解除关联后重试注销")
         plan_ids = list(db.scalars(select(Plan.id).where(Plan.owner_id == uid)).all())
         if plan_ids:
             db.execute(delete(Checkin).where(Checkin.plan_id.in_(plan_ids)))

@@ -30,6 +30,12 @@ ASSISTANT_PROVIDER=deterministic
 # 可按需指向已部署的心电云端工作台静态 HTTPS 入口（不含参数）
 ECG_EXTERNAL_URL=https://62.234.150.104/
 FRONTEND_ORIGIN=https://62.234.150.104
+# 独立站点使用 /；接入原心电站点时两项均改为 /heartlife/
+VITE_BASE_PATH=/
+COOKIE_PATH=/
+# 只读心电集成默认关闭；启用步骤见 docs/心电集成.md
+ECG_API_BASE_URL=
+ECG_CLIENT_SECRET=
 EOF
   chmod 600 "$ENV_FILE"
   echo "    已生成首次生产配置文件: $ENV_FILE （请按实际域名或公网 IP 核对 FRONTEND_ORIGIN）"
@@ -43,6 +49,10 @@ python3 -m venv "$APP_DIR/.venv"
 "$APP_DIR/.venv/bin/python" -m pip install -r "$APP_DIR/backend/requirements.txt"
 
 echo "==> [3/5] 安装前端依赖并构建适老化生产静态资源 (frontend/dist)"
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
 cd "$APP_DIR/frontend"
 npm ci
 npm run build
@@ -53,7 +63,7 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
-"$APP_DIR/.venv/bin/python" -c "from app.core.config import get_settings; from app.db.migrations_runner import run_migrations; run_migrations(get_settings().database_url)"
+"$APP_DIR/.venv/bin/python" -c "from app.core.config import Settings; from app.db.migrations_runner import run_migrations; run_migrations(Settings().database_url)"
 
 echo "==> [5/5] 安装 systemd 用户级服务 (~/.config/systemd/user/heartlife.service)"
 mkdir -p "$SYSTEMD_USER_DIR"

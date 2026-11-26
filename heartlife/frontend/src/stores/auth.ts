@@ -26,6 +26,7 @@ export const useAuthStore = defineStore('auth', () => {
   const publicConfig = ref<PublicConfig>({
     assistant_enabled: false,
     ecg_external_url: null,
+    ecg_integration_enabled: false,
     demo_mode: false,
   })
 
@@ -45,6 +46,7 @@ export const useAuthStore = defineStore('auth', () => {
       publicConfig.value = {
         assistant_enabled: Boolean(cfg?.assistant_enabled),
         ecg_external_url: cfg?.ecg_external_url ?? null,
+        ecg_integration_enabled: Boolean(cfg?.ecg_integration_enabled),
         demo_mode: Boolean(cfg?.demo_mode),
       }
     } catch {

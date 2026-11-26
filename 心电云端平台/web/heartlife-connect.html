@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>连接心伴 · 心电健康助手</title>
+  <link rel="stylesheet" href="/assets/heartlife-connect.css">
+  <script src="/assets/heartlife_core.js" defer></script>
+  <script src="/assets/heartlife-connect.js" defer></script>
+</head>
+<body>
+  <header><a href="/">返回心电记录</a><span>心电健康助手</span></header>
+  <main>
+    <h1>连接心伴</h1>
+    <p class="intro">在心伴查看本人的心电记录摘要与日、月、年趋势。</p>
+    <p id="bridge-feedback" role="status" aria-live="polite">正在确认连接状态…</p>
+    <form id="bridge-login" hidden>
+      <h2>登录心电账号</h2>
+      <label for="bridge-username">账号</label><input id="bridge-username" name="username" autocomplete="username" required maxlength="32">
+      <label for="bridge-password">密码</label><input id="bridge-password" name="password" type="password" autocomplete="current-password" required maxlength="128">
+      <button id="bridge-login-submit" type="submit">登录</button>
+    </form>
+    <section id="bridge-account" hidden>
+      <div class="account"><p>当前心电账号：<strong id="bridge-account-name"></strong></p><button id="bridge-logout" class="secondary" type="button">退出账号</button></div>
+      <div id="bridge-linked" hidden><h2>已关联心伴</h2><p>只读摘要授权有效期至 <span id="bridge-link-expiry"></span>。</p></div>
+      <form id="bridge-code-form" hidden>
+        <h2>关联本人账号</h2>
+        <p>生成绑定码后，在心伴登录本人的账号，打开“心电记录”并粘贴绑定码。</p>
+        <label class="consent"><input id="bridge-consent" type="checkbox" required><span>我确认关联本人的心伴账号，允许读取最近记录、测量时长和心率趋势。</span></label>
+        <p class="muted">授权不包含原始波形、备注、测量控制或管理员权限。请勿将绑定码交给他人。</p>
+        <button id="bridge-generate" type="submit">生成一次性绑定码</button>
+      </form>
+      <section id="bridge-code-panel" hidden>
+        <label for="bridge-code">一次性绑定码</label><textarea id="bridge-code" rows="2" readonly autocomplete="off" spellcheck="false"></textarea>
+        <p class="muted">有效期至 <span id="bridge-code-expiry"></span>；重新生成会使旧码失效。</p>
+        <button id="bridge-copy" class="secondary" type="button">复制绑定码</button>
+      </section>
+      <div class="actions"><a id="bridge-open" class="button" rel="noopener noreferrer" hidden>打开心伴</a><button id="bridge-revoke" class="secondary" type="button" hidden>撤销关联与绑定码</button></div>
+    </section>
+    <button id="bridge-refresh" class="secondary" type="button">刷新连接状态</button>
+  </main>
+</body>
+</html>

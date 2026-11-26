@@ -43,12 +43,16 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
 
 export function buildApiUrl(
   path: string,
-  params?: Record<string, string | number | boolean | null | undefined>
+  params?: Record<string, string | number | boolean | null | undefined>,
+  basePath = import.meta.env.BASE_URL
 ): string {
-  const normalized = path.startsWith('/api/')
-    ? path
-    : `/api/v1${path.startsWith('/') ? path : `/${path}`}`
-  if (!params) return normalized
+  const base = `/${(basePath || '/').replace(/^\/+|\/+$/g, '')}`.replace(/\/$/, '')
+  const relative = base && path.startsWith(`${base}/api/`) ? path.slice(base.length) : path
+  const normalized = relative.startsWith('/api/')
+    ? relative
+    : `/api/v1${relative.startsWith('/') ? relative : `/${relative}`}`
+  const url = `${base}${normalized}`
+  if (!params) return url
   const usp = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') {
@@ -56,7 +60,7 @@ export function buildApiUrl(
     }
   }
   const qs = usp.toString()
-  return qs ? `${normalized}?${qs}` : normalized
+  return qs ? `${url}?${qs}` : url
 }
 
 export async function apiRequest<T = unknown>(

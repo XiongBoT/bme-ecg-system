@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
 import HomeView from '../views/HomeView.vue'
+import EcgView from '../views/EcgView.vue'
 import AuthView from '../views/AuthView.vue'
 import JournalView from '../views/JournalView.vue'
 import PlansView from '../views/PlansView.vue'
@@ -29,6 +30,12 @@ export const routes: RouteRecordRaw[] = [
     name: 'home',
     component: HomeView,
     meta: { requiresAuth: true, title: '首页 · 心伴 HeartLife' },
+  },
+  {
+    path: '/ecg',
+    name: 'ecg',
+    component: EcgView,
+    meta: { requiresAuth: true, title: '我的心电记录 · 心伴 HeartLife' },
   },
   {
     path: '/journal',
@@ -115,7 +122,7 @@ export const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior() {
     return { top: 0 }

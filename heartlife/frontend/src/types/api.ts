@@ -1,6 +1,7 @@
 export interface PublicConfig {
   assistant_enabled: boolean
   ecg_external_url: string | null
+  ecg_integration_enabled?: boolean
   demo_mode: boolean
 }
 

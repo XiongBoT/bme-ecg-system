@@ -11,6 +11,7 @@ function clearAccount() {
   state.epoch++; state.listEpoch++; state.generation++; state.analysisGeneration++;
   state.ready=false; state.user=null; state.csrf=''; state.sessions=[]; state.selected=null;
   $('nav-tasks').hidden=$('account-admin-group').hidden=$('account-work-group').hidden=$('account-security-group').hidden=true;
+  $('account-heartlife-group').hidden=true;$('heartlife-entry').removeAttribute('href');
   text('nav-username','');text('account-role','');
   state.wave=null; state.analysis=null; state.analyzing=null; state.views.clear(); state.page=0;
   state.busy=false; state.total=0; state.filters={}; state.analysisKey=''; state.tableKey=''; state.listKey='';
@@ -49,6 +50,8 @@ function enterWorkspace(payload) {
   $('nav-tasks').hidden=$('account-work-group').hidden=!state.user;
   $('account-admin-group').hidden=!state.user?.is_admin;
   $('account-security-group').hidden=!state.auth;
+  $('account-heartlife-group').hidden=!state.user||!state.heartlifeUrl;
+  if(state.user&&state.heartlifeUrl)$('heartlife-entry').href=state.heartlifeUrl;
   const linkedRecord=new URLSearchParams(globalThis.location?.search || '').get('record');
   if(linkedRecord && /^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(linkedRecord)){state.filters.q=linkedRecord;$('query').value=linkedRecord;}
   $('manage-console').hidden=!state.user?.is_admin;
@@ -271,6 +274,7 @@ async function initialize() {
   $('login-submit').disabled=true;
   try {
     const config=await (await api('/api/auth/config')).json();if(generation!==initializeGeneration||epoch!==state.epoch)return;state.auth=config.enabled;
+    state.heartlifeUrl=typeof ECGHeartLife==='undefined'?null:ECGHeartLife.safeUrl(config.heartlife_url);
     if(state.auth) {
       state.token='';sessionStorage.removeItem('ecg-token');
       try {const payload=await (await api('/api/auth/me')).json();if(generation===initializeGeneration&&epoch===state.epoch)enterWorkspace(payload);}
