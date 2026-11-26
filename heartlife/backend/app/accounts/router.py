@@ -32,7 +32,7 @@ def _set_auth_cookies(response: Response, settings: Settings, raw_session: str, 
         secure=settings.cookie_secure,
         samesite="lax",
         max_age=max_age,
-        path="/",
+        path=settings.cookie_path,
     )
     response.set_cookie(
         key=settings.csrf_cookie_name,
@@ -41,13 +41,13 @@ def _set_auth_cookies(response: Response, settings: Settings, raw_session: str, 
         secure=settings.cookie_secure,
         samesite="lax",
         max_age=max_age,
-        path="/",
+        path=settings.cookie_path,
     )
 
 
 def _clear_auth_cookies(response: Response, settings: Settings) -> None:
-    response.delete_cookie(key=settings.session_cookie_name, path="/")
-    response.delete_cookie(key=settings.csrf_cookie_name, path="/")
+    response.delete_cookie(key=settings.session_cookie_name, path=settings.cookie_path)
+    response.delete_cookie(key=settings.csrf_cookie_name, path=settings.cookie_path)
 
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)

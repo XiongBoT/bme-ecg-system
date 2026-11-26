@@ -1,11 +1,11 @@
 # HeartLife 系统架构说明 (Architecture)
 
-## 1. 架构定位与绝对解耦边界
+## 1. 架构定位与服务边界
 
 **心伴（HeartLife）** 是独立的心脏健康生活记录、习惯计划、健康科普与同伴互助 Web 平台。
 
-- **零耦合门禁**：与原 `bme-ecg-system` 物理隔离在同级独立仓库目录 `heartlife/`，不导入原仓库任何 Python/JS 模块，不连接原 SQLite 数据库，不共享会话 Cookie，也不修改原仓库任何文件。
-- **可选单向跳转**：仅当部署者显式配置合法的 HTTPS 固定地址 `ECG_EXTERNAL_URL`（不含凭据、查询参数与锚点）时，前端以 `rel="noopener noreferrer"` 提供外部独立工具入口。
+- **独立服务**：代码位于 `heartlife/`，不导入原心电平台业务模块，不连接其 SQLite 数据库，不共享会话 Cookie。跨模块接口变更遵循根目录协作与测试约定。
+- **可选授权集成**：按用户确认的方案增加 `ecg` 适配模块，通过一次性绑定码和可撤销的 `summary:read` 授权读取本人摘要。接口凭据只用于服务端；测量和波形详情继续进入原平台。配置为空时仅保留合法 HTTPS 外链。细节见[心电集成](心电集成.md)。
 
 ```mermaid
 flowchart LR
@@ -21,7 +21,9 @@ flowchart LR
   API --> Privacy["privacy 数据导出与二次确认注销"]
   API --> P1["challenges / assistant / family"]
   Accounts & Community & Journal & Plans & Knowledge & Reports & Notif & Privacy & P1 --> DB[("独立 SQLite + FTS5")]
-  VueApp -. "可选静态 HTTPS 外链 (无 Token)" .-> LegacyECG["独立 ECG 系统"]
+  API --> ECGAdapter["ecg 本人摘要适配"]
+  ECGAdapter -. "可选只读授权接口" .-> LegacyECG["独立 ECG 系统"]
+  VueApp -. "测量与详情入口" .-> LegacyECG
 ```
 
 ## 2. 核心设计要点

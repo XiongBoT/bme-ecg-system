@@ -7,6 +7,7 @@ import {
   CalendarCheck,
   Download,
   HeartHandshake,
+  HeartPulse,
   History,
   LogOut,
   NotebookPen,
@@ -552,6 +553,15 @@ onMounted(() => {
       <section class="hl-card stack-sm" aria-label="健康记录与功能快捷入口">
         <h2 class="section-title">日常健康与陪伴入口</h2>
         <div class="grid-2">
+          <FeatureTile
+            v-if="auth.publicConfig.ecg_integration_enabled"
+            to="/ecg"
+            title="我的心电记录"
+            description="关联本人心电账号，查看测量摘要与趋势"
+          >
+            <template #icon><HeartPulse :size="22" /></template>
+          </FeatureTile>
+
           <FeatureTile
             to="/journal"
             title="今日健康日记"

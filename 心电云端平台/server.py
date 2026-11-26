@@ -245,12 +245,24 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     app.state.workflow = workflow
     app.state.backup_schedule = backup_schedule
 
+    from heartlife_bridge import MACHINE_ROUTES, add_routes as add_heartlife_routes
+    heartlife = add_heartlife_routes(app, connect, identity, auth_enabled)
+    app.state.heartlife = heartlife
+
     @app.middleware('http')
     async def guard(request: Request, call_next):
         who = {'kind': 'legacy'}
         if request.url.path.startswith('/api/'):
             public_update = request.method == 'GET' and request.url.path == '/api/updates'
-            if auth_enabled and not public_update and request.url.path not in ('/api/auth/config', '/api/auth/login', '/api/account-applications'):
+            machine_route = (request.method, request.url.path) in MACHINE_ROUTES
+            if machine_route:
+                # Dedicated grant routes never acquire general user/device identity.
+                try:
+                    heartlife.require_client(request)
+                except HTTPException as exc:
+                    return JSONResponse({'detail': exc.detail}, status_code=exc.status_code,
+                                        headers={'Cache-Control': 'no-store'})
+            elif auth_enabled and not public_update and request.url.path not in ('/api/auth/config', '/api/auth/login', '/api/account-applications'):
                 who = auth.authenticate(request)
                 if who is None:
                     return JSONResponse({'detail': '请先登录'}, status_code=401)
@@ -310,7 +322,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
 
     @app.get('/api/auth/config')
     def auth_config():
-        return {'enabled': auth_enabled}
+        return {'enabled': auth_enabled, 'heartlife_url': heartlife.public_url}
 
     @app.post('/api/auth/login')
     def login(payload: LoginInput, request: Request):
@@ -840,6 +852,11 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     add_annotation_routes(app, connect, identity.get, find_session)
 
     app.mount('/assets', StaticFiles(directory=ROOT / 'web'), name='assets')
+
+    @app.get('/heartlife-connect')
+    def heartlife_connect():
+        return FileResponse(ROOT / 'web' / 'heartlife-connect.html',
+                            headers={'Referrer-Policy': 'no-referrer'})
 
     @app.get('/tasks')
     def tasks_page():

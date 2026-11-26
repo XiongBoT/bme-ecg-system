@@ -7,6 +7,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Float,
     Index,
     Integer,
     String,
@@ -60,6 +61,21 @@ class UserSession(Base):
     csrf_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+
+
+class EcgLink(Base):
+    """Private integration credentials. Never include in profile/export/assistant data."""
+    __tablename__ = "ecg_links"
+
+    user_id: Mapped[str] = mapped_column(String(32), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    operation_id: Mapped[str] = mapped_column(String(32), nullable=False, default=_uuid)
+    ecg_user_id: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
+    ecg_username: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    grant_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    expires_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="binding")
+    cleanup_after: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
 
 

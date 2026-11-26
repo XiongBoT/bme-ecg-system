@@ -29,6 +29,7 @@ OPTIONAL_MODULE_ROUTERS = [
     "app.challenges.router",
     "app.assistant.router",
     "app.family.router",
+    "app.ecg.router",
 ]
 
 
@@ -92,6 +93,7 @@ def create_app(
         return {
             "assistant_enabled": s.is_assistant_available,
             "ecg_external_url": s.ecg_external_url,
+            "ecg_integration_enabled": s.is_ecg_integration_enabled,
             "demo_mode": s.demo_mode,
         }
 

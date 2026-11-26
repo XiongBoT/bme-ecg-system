@@ -19,6 +19,8 @@
 
 ## 核心路由总览
 
+心电集成增加 `/api/v1/me/ecg/link`（查询、绑定、解绑）和 `/api/v1/me/ecg/summary`（本人摘要）。默认关闭，双方会话独立；错误、恢复流程与完整权限契约见[心电集成](心电集成.md)。`public-config` 额外返回 `ecg_integration_enabled`。同站点部署时，对外路径增加 `/heartlife` 前缀。
+
 | 模块 | 方法与路径 | 权限 | 说明 |
 |---|---|---|---|
 | 系统 | `GET /api/v1/health` | 匿名 | 健康检查 |

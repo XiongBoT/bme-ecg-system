@@ -72,6 +72,38 @@ def period_bounds(period, anchor, offset):
     return start, end, count
 
 
+def read_trends(db, owner_id, period, anchor, utc_offset_minutes):
+    """Shared owner-scoped calculation; caller establishes the account identity."""
+    try:
+        start, end, count = period_bounds(period, anchor, utc_offset_minutes)
+    except (ValueError, OverflowError):
+        raise HTTPException(422, '日期无效')
+    buckets = [dict(index=i, label=(f'{i:02d}:00' if period=='day' else str(i+1)), records=0,
+                    duration_s=0., hr_mean=None, hr_records=0, _weight=0., _sum=0.) for i in range(count)]
+    rows = db.execute(TREND_QUERY, (owner_id, start.isoformat(), end.isoformat()))
+    for row in rows:
+        meta = json.loads(row['metadata'])
+        stamp = datetime.fromisoformat(meta['started_utc'].replace('Z','+00:00')).astimezone(start.tzinfo)
+        i = stamp.hour if period=='day' else stamp.day-1 if period=='month' else stamp.month-1
+        bucket = buckets[i]
+        bucket['records'] += 1
+        bucket['duration_s'] += row['sample_count']/360
+        details = json.loads(row['details']) if row['details'] else {}
+        hr = (details.get('analysis_stats') or {}).get('hr')
+        if hr:
+            bucket['_weight'] += hr['window_samples']
+            bucket['_sum'] += hr['mean']*hr['window_samples']
+            bucket['hr_records'] += 1
+    for bucket in buckets:
+        bucket['hr_mean'] = round(bucket['_sum']/bucket['_weight'],1) if bucket['_weight'] else None
+        bucket['duration_s'] = round(bucket['duration_s'],1)
+        del bucket['_sum'], bucket['_weight']
+    return dict(period=period, anchor=anchor, utc_offset_minutes=utc_offset_minutes, buckets=buckets,
+                total_records=sum(b['records'] for b in buckets),
+                total_duration_s=round(sum(b['duration_s'] for b in buckets),1),
+                note='按采集开始时间汇总已上传完成且未回收的串口记录；心率来自终端质量合格窗口，缺失不记为0。')
+
+
 def add_routes(app, connect, identity, devices, require_device, auth_enabled):
     initialize(connect)
 
@@ -102,36 +134,9 @@ def add_routes(app, connect, identity, devices, require_device, auth_enabled):
     def trends(period: Literal['day','month','year'], anchor: str = Query(pattern=r'^\d{4}-\d{2}-\d{2}$'),
                utc_offset_minutes: int = Query(default=480, ge=-720, le=840)):
         who = user()
-        try:
-            start, end, count = period_bounds(period, anchor, utc_offset_minutes)
-        except (ValueError, OverflowError):
-            raise HTTPException(422, '日期无效')
         # No waveform or personal result is stored in client preferences.
-        buckets = [dict(index=i, label=(f'{i:02d}:00' if period=='day' else str(i+1)), records=0,
-                        duration_s=0., hr_mean=None, hr_records=0, _weight=0., _sum=0.) for i in range(count)]
         with closing(connect()) as db:
-            rows = db.execute(TREND_QUERY, (who['id'], start.isoformat(), end.isoformat()))
-            for row in rows:
-                meta = json.loads(row['metadata'])
-                stamp = datetime.fromisoformat(meta['started_utc'].replace('Z','+00:00')).astimezone(start.tzinfo)
-                i = stamp.hour if period=='day' else stamp.day-1 if period=='month' else stamp.month-1
-                bucket = buckets[i]
-                bucket['records'] += 1
-                bucket['duration_s'] += row['sample_count']/360
-                details = json.loads(row['details']) if row['details'] else {}
-                hr = (details.get('analysis_stats') or {}).get('hr')
-                if hr:
-                    bucket['_weight'] += hr['window_samples']
-                    bucket['_sum'] += hr['mean']*hr['window_samples']
-                    bucket['hr_records'] += 1
-        for bucket in buckets:
-            bucket['hr_mean'] = round(bucket['_sum']/bucket['_weight'],1) if bucket['_weight'] else None
-            bucket['duration_s'] = round(bucket['duration_s'],1)
-            del bucket['_sum'], bucket['_weight']
-        return dict(period=period, anchor=anchor, utc_offset_minutes=utc_offset_minutes, buckets=buckets,
-                    total_records=sum(b['records'] for b in buckets),
-                    total_duration_s=round(sum(b['duration_s'] for b in buckets),1),
-                    note='按采集开始时间汇总已上传完成且未回收的串口记录；心率来自终端质量合格窗口，缺失不记为0。')
+            return read_trends(db, who['id'], period, anchor, utc_offset_minutes)
 
     @app.post('/api/measurements', status_code=202)
     def request_measurement(payload: MeasurementRequest):

@@ -16,6 +16,7 @@ ROOT=Path(__file__).resolve().parent
 PROJECT=ROOT.parent
 WEB=PROJECT/'web'
 ASSETS=('applications.js','health.js','health_core.js','health.css','navigation.css','index.html','app.js','workspace.js','devices.js','measurement.js','mobile.js',
+        'heartlife_core.js','heartlife-connect.html','heartlife-connect.js','heartlife-connect.css',
         'workflow_core.js','review.js','tasks.html','operations.html','workflow-page.js','workflow.css',
         'annotations.js','annotations.css','backup-schedule.js',
         'physiology.js','physiology.css','experience_core.js','experience.js','experience.css',
@@ -40,7 +41,7 @@ def prepare_assets(destination: Path):
             target.write_text(html,encoding='utf-8',newline='\n')
         else: shutil.copyfile(source,target)
     # Ensure no linked asset is missing. Do not package data, credentials or fixtures.
-    for name in ('index.html','device-manager.html'):
+    for name in ('index.html','device-manager.html','heartlife-connect.html'):
         for linked in re.findall(r'(?:src|href)="/assets/([^"?#]+)"',(destination/'web'/name).read_text(encoding='utf-8')):
             if not (destination/'web'/linked).is_file(): raise ValueError('Unpackaged asset: '+linked)
 

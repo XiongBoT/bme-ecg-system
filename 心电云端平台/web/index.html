@@ -34,6 +34,7 @@
   <link rel="stylesheet" href="/assets/health.css">
   <link rel="stylesheet" href="/assets/navigation.css">
   <script src="/assets/health_core.js" defer></script>
+  <script src="/assets/heartlife_core.js" defer></script>
   <script src="/assets/health.js" defer></script>
   <script src="/assets/applications.js" defer></script>
 </head>
@@ -73,6 +74,7 @@
       <p class="account-intro">记录按账号保存，设置与管理入口在这里集中查看。</p>
       <div class="account-grid">
         <section id="account-work-group" class="account-group" hidden><h2>我的工作台</h2><p>查看上传与分析进度。</p><a id="task-center" class="button secondary" href="/tasks" hidden>任务中心</a></section>
+        <section id="account-heartlife-group" class="account-group" hidden><h2>心伴健康生活</h2><p>记录生活、制定习惯计划，查看已授权的心电摘要。</p><a id="heartlife-entry" class="button secondary" rel="noopener noreferrer">打开心伴</a><a class="button secondary" href="/heartlife-connect">关联账号与授权</a></section>
         <section class="account-group"><h2>偏好与帮助</h2><p>调整阅读体验，找到使用说明。</p><button id="app-preferences" class="button secondary" type="button">应用设置</button><button id="my-help" class="button secondary" type="button">使用帮助与账号恢复</button><button id="account-install" class="button secondary mobile-only" type="button">安装到手机</button></section>
         <section id="account-security-group" class="account-group" hidden><h2>账号与安全</h2><p>管理当前账号的登录。</p><button id="change-password" class="button secondary" hidden>修改密码</button><button id="logout" class="button secondary" hidden>退出登录</button></section>
         <section id="account-admin-group" class="account-group account-management" hidden><h2>管理工具 <span>仅管理员</span></h2><p>账号授权、设备与平台维护。</p><a id="manage-console" class="button primary" href="/admin" hidden>进入管理后台</a><div class="account-management-links"><a id="manage-devices" class="button secondary" href="/devices" hidden>设备管理</a><a id="manage-operations" class="button secondary" href="/operations" hidden>运行总览</a><a id="manage-database" class="button secondary" href="/database" hidden>数据库管理</a><button id="admin" class="button secondary" hidden>账号与待分配记录</button></div></section>

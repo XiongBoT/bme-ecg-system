@@ -21,7 +21,11 @@ def sanitize_external_ecg_url(raw: str | None) -> str | None:
         return None
     try:
         parsed = urlparse(cleaned)
+        port = parsed.port
     except ValueError:
+        return None
+
+    if any(ord(c) < 33 for c in cleaned) or "\\" in cleaned or (port is not None and not 1 <= port <= 65535):
         return None
 
     if parsed.scheme.lower() != "https":
@@ -51,6 +55,7 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     session_cookie_name: str = "hl_session"
     csrf_cookie_name: str = "hl_csrf"
+    cookie_path: str = "/"
 
     login_rate_limit_count: int = 5
     login_rate_limit_window_seconds: int = 900
@@ -65,6 +70,40 @@ class Settings(BaseSettings):
     assistant_timeout_seconds: float = 8.0
 
     ecg_external_url: str | None = None
+    ecg_api_base_url: str | None = None
+    ecg_client_secret: str = ""
+
+    @field_validator("cookie_path")
+    @classmethod
+    def _validate_cookie_path(cls, value: str) -> str:
+        if value not in ("/", "/heartlife/"):
+            raise ValueError("cookie_path must be / or /heartlife/")
+        return value
+
+    @field_validator("ecg_api_base_url", mode="before")
+    @classmethod
+    def _validate_ecg_api_url(cls, value: str | None) -> str | None:
+        if not value or not value.strip():
+            return None
+        value = value.strip().rstrip("/")
+        try:
+            parsed = urlparse(value)
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("ECG API address is invalid") from exc
+        if (any(ord(c) < 33 for c in value) or "\\" in value or not parsed.hostname
+                or parsed.username or parsed.password or parsed.path or parsed.query
+                or parsed.fragment or parsed.params or (port is not None and not 1 <= port <= 65535)):
+            raise ValueError("ECG API address must be a fixed origin without credentials or paths")
+        if parsed.scheme != "https" and not (
+            parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "::1")
+        ):
+            raise ValueError("ECG API requires HTTPS or an explicit loopback address")
+        return value
+
+    @property
+    def is_ecg_integration_enabled(self) -> bool:
+        return bool(self.ecg_external_url and self.ecg_api_base_url and len(self.ecg_client_secret) >= 32)
 
     @field_validator("ecg_external_url", mode="before")
     @classmethod
