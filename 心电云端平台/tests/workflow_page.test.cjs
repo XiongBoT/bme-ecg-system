@@ -19,3 +19,11 @@ test('older filtered task result cannot overwrite the current list',async()=>{
  const older=h.ctx.refreshPage();await new Promise(r=>setImmediate(r));await h.ctx.refreshPage();resolve({counts:{},records:[],total:99,measured_at:1});await older;
  assert.equal(h.el('tasks-total').textContent,'0 条记录');
 });
+
+test('operations explains disabled and blocked schedules and handles older servers',()=>{
+ const h=harness(),data={queue:{},devices:{online:0,offline:0,unknown:0,disabled:0},uploads:{pending:0,stalled:0},disk:{},issues:[],last_successful_backup:null};
+ h.ctx.renderOperations(data);assert.match(h.el('backup-schedule-status').textContent,/状态未提供/);
+ data.backup_schedule={enabled:false};h.ctx.renderOperations(data);assert.match(h.el('backup-schedule-status').textContent,/未启用/);
+ data.backup_schedule={enabled:true,hour:2,minute:5,state:'blocked',next_due:1};h.ctx.renderOperations(data);
+ assert.match(h.el('backup-schedule-status').textContent,/02:05.*暂时受阻/);assert.match(h.el('backup-schedule-status').textContent,/全部备份保留/);
+});

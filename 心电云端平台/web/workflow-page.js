@@ -54,6 +54,10 @@ function renderOperations(data){
  text('service-status','分类服务：'+({ready:'已就绪',not_configured:'未启用',error:'加载异常'}[data.model_status]||'待确认')+' · QRS/RR：'+(data.physiology_ready?'已就绪':'未就绪'));
  text('queue-status','历史任务：'+(q.complete||0)+' 完成 · '+(q.ineligible||0)+' 条件不足 · '+(q.failed||0)+' 失败（含重试前的任务）');
  text('backup-status','最近成功备份：'+when(data.last_successful_backup));text('disk-status','可用空间 '+bytes(data.disk.free_bytes)+'；仅显示磁盘容量，文件分类占用请打开数据库管理。');
+ const schedule=data.backup_schedule;
+ text('backup-schedule-status',!schedule?'备份计划状态未提供，请刷新或检查服务版本。':!schedule.enabled?'每日自动备份未启用。':
+   '每日北京时间 '+String(schedule.hour).padStart(2,'0')+':'+String(schedule.minute).padStart(2,'0')+' · '+
+   ({scheduled:'已安排',blocked:'暂时受阻',waiting:'等待维护队列'}[schedule.state]||'请查看维护任务')+' · 下次计划 '+when(schedule.next_due)+'。全部备份保留，需定期检查容量。');
 }
 async function refreshPage(){
  if(!client.user)return;
