@@ -244,6 +244,7 @@ class WorkflowStore:
                 devices[status] += 1
             backup = db.execute("SELECT status,updated FROM management_jobs WHERE kind='backup' ORDER BY created DESC LIMIT 1").fetchone()
             last_success = db.execute("SELECT updated FROM management_jobs WHERE kind='backup' AND status='complete' ORDER BY updated DESC LIMIT 1").fetchone()
+            schedule = db.execute('SELECT enabled,hour,minute,next_due,retry_after,state FROM backup_schedule WHERE id=1').fetchone()
             failed = db.execute("SELECT COUNT(*) FROM analysis_jobs a JOIN sessions s ON s.id=a.session_id LEFT JOIN session_details d ON d.session_id=s.id WHERE a.status IN ('failed','not_configured') AND d.trashed_at IS NULL AND a.updated>? AND NOT EXISTS(SELECT 1 FROM analysis_jobs b WHERE b.session_id=a.session_id AND b.kind=a.kind AND (b.created>a.created OR (b.created=a.created AND b.job_id>a.job_id)))", (stamp-7*86400,)).fetchone()[0]
             blocked = db.execute("SELECT COUNT(*) FROM workflow_intents i JOIN sessions s ON s.id=i.session_id AND s.owner_id=i.owner_id JOIN users u ON u.id=i.owner_id AND u.active=1 LEFT JOIN session_details d ON d.session_id=s.id WHERE i.status='blocked' AND d.trashed_at IS NULL").fetchone()[0]
         try:
@@ -261,6 +262,12 @@ class WorkflowStore:
         if not last_success: issue('backup_missing','warning','尚无成功备份记录，请创建服务器本地备份','/database')
         elif stamp-last_success['updated']>7*86400: issue('backup_old','warning','最近成功备份已超过 7 天，请安排新备份','/database')
         if backup and backup['status'] in ('failed','interrupted'): issue('backup_failed','warning','最近一次备份未完成，请查看维护任务','/database')
+        if schedule:
+            if not schedule['enabled']: issue('backup_schedule_disabled','info','每日自动备份未启用；请按需要在数据库管理中设置','/database')
+            elif schedule['state']=='blocked': issue('backup_schedule_blocked','warning','自动备份受阻，请检查磁盘空间和维护任务','/database')
+            elif schedule['next_due'] and stamp-max(schedule['next_due'],schedule['retry_after'])>1800:
+                issue('backup_schedule_overdue','warning','自动备份已超过计划时间 30 分钟，请检查服务与维护队列','/database')
         return {'measured_at':stamp,'devices':devices,'uploads':uploads,'queue':queue,'disk':disk,'backup':dict(backup) if backup else None,
+                'backup_schedule':dict(schedule) | {'enabled':bool(schedule['enabled']),'timezone':'Asia/Shanghai','retention':'keep_all'} if schedule else None,
                 'last_successful_backup':last_success['updated'] if last_success else None,
                 'model_status':self.services['model'].model_status,'physiology_ready':self.services['physiology'].ready,'issues':issues}
