@@ -6,6 +6,8 @@
 
 | 文件 | 用途 |
 | --- | --- |
+| [分类误差诊断.md](分类误差诊断.md) | 2026-11-26：基于已有固定模型汇总的 S 类混淆、未输出、误报、逐记录贡献及性能口径 |
+| [classification-diagnostics.json](classification-diagnostics.json) | 诊断计数、两路径类别指标、逐记录性能与生成证据摘要 |
 | [算法对比与分类评测.md](算法对比与分类评测.md) | 2026-11-24：QRS 44 条全长（22.07 小时）、分类 21 条全长（10.53 小时），逐记录及各类别结果 |
 | [qrs-comparison.json](qrs-comparison.json) | 三种 QRS 的 150/50 ms 匹配结果、输入/代码摘要与耗时 |
 | [classification-benchmark.json](classification-benchmark.json) | 实际分类链路与参考 R 点诊断对照、混淆矩阵、拒绝及覆盖情况 |

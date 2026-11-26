@@ -2,6 +2,12 @@
 
 [算法与评估](../../docs/算法与评估.md) · [已有报告](../../docs/algorithm-validation/README.md) · [云端首页](../README.md)
 
+## 固定模型误差诊断
+
+新增 [分类误差诊断](../../docs/algorithm-validation/分类误差诊断.md)，使用已有 21 条公开记录的实际链路和参考 R 汇总，分解 S→N/S→V、未匹配输出及 S 误报，并保留逐记录贡献与原性能计时。未重新训练、替换权重或调整默认算法。
+
+从本目录的上一级云端目录执行 `python -m research.classification_diagnostics` 可重新生成报告和 JSON；追加 `--check` 只核对证据是否同步。该工具只需 Python 标准库，不下载数据。CI 同时运行诊断测试和过期检查。未输出的细分原因不能由汇总直接得出，下一步需回看逐拍明细，见报告中的限制和优先记录。
+
 本目录用于公开数据回放与离线评估。`streaming_qrs.py` 与 `physiology.py` 同时供云端独立 QRS/RR 分析复用，随源码包交付；评估脚本、基准工具、WFDB 及公开数据不进入生产部署包。
 
 ## 2026-11-24 统一评测协议与验收
