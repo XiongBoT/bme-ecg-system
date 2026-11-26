@@ -72,7 +72,7 @@ describe('HeartLife ECG account integration', () => {
     })
     const storage = vi.spyOn(Storage.prototype, 'setItem')
     const wrapper = await render()
-    expect(wrapper.get('a[href="https://ecg.example.test/heartlife-connect"]').exists()).toBe(true)
+    expect(wrapper.find('a[href="https://ecg.example.test/heartlife-connect"]').exists()).toBe(true)
     await wrapper.get('#ecg-link-code').setValue('test-onetime-code-abcdefghijklmnopqrstuvwxyz')
     expect(button(wrapper, '确认关联').attributes('disabled')).toBeDefined()
     await wrapper.get('input[type="checkbox"]').setValue(true)

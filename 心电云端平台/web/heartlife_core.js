@@ -11,6 +11,7 @@
     let state={phase:'loading',enabled:false,user:null,url:null,linked:false,expires_at:null,code:'',code_expires_at:null,message:''};
     const emit=()=>changed({...state});
     const current=ticket=>ticket===revision;
+    const errorMessage=error=>error.name==='AbortError'?'连接超时，请刷新后重试':error.status?error.message:'暂时无法连接，请检查网络后刷新。';
     function reset(phase='loading'){
       revision++;csrf='';user=null;
       state={phase,enabled:false,user:null,url:null,linked:false,expires_at:null,code:'',code_expires_at:null,message:''};emit();return revision;
@@ -31,7 +32,7 @@
     function failure(error,ticket){
       if(!current(ticket))return;
       if(error.status===401){reset('login');state.message='登录已失效或账号已改变，请重新登录';}
-      else {state.phase=user?(state.enabled?'ready':'disabled'):'error';state.code='';state.code_expires_at=null;state.message=error.name==='AbortError'?'连接超时，请刷新后重试':error.message||'连接失败，请刷新后重试';}
+      else {state.phase=user?(state.enabled?'ready':'disabled'):'error';state.code='';state.code_expires_at=null;state.message=errorMessage(error);}
       emit();
     }
     async function load(){
@@ -51,7 +52,7 @@
       if(state.phase==='busy')return;
       const ticket=revision;state.phase='busy';state.message='';emit();
       try{await request('/api/auth/login',{method:'POST',body:{username,password},expected:null});if(current(ticket))await load();}
-      catch(error){if(current(ticket)){state.phase='login';state.message=error.message;emit();}}
+      catch(error){if(current(ticket)){state.phase='login';state.message=errorMessage(error);emit();}}
     }
     async function generate(consent){
       if(!user||!state.enabled||state.phase!=='ready'||state.linked)return;

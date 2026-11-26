@@ -65,3 +65,10 @@ test('page hide clears secrets and ignores prior request completion',async()=>{
   finish(response({code:'hidden-secret',expires_at:9999999999}));await pending;
   assert.equal(h.state.user,null);assert.equal(h.state.code,'');assert.equal(h.state.url,null);
 });
+test('network errors clear codes and show an actionable message',async()=>{
+  const h=harness();await h.controller.load();
+  h.routes.set('/api/heartlife/link-code',()=>{throw new TypeError('fetch internal transport failure');});
+  await h.controller.generate(true);
+  assert.equal(h.state.code,'');assert.equal(h.state.phase,'ready');assert.match(h.state.message,/检查网络/);
+  assert.ok(!h.state.message.includes('transport'));
+});
