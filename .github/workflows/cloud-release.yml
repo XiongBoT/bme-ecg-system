@@ -1,0 +1,54 @@
+name: 准备云端部署包
+run-name: Prepare cloud source ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: '已审核 main 当前提交的完整 40 位 SHA（仅准备包，不部署）'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cloud-release-preparation
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Verify reviewed main and prepare source
+    if: >-
+      github.repository == 'XiongBoT/bme-ecg-system' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'XiongBoT' &&
+      github.triggering_actor == 'XiongBoT'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Check owner, exact main commit and successful quality run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.sha }}
+          PYTHONUTF8: '1'
+        run: python tools/prepare_cloud_release.py
+      - name: Upload verified source only (not a deployment)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cloud-source-${{ github.sha }}
+          path: |
+            心电云端平台/deploy/dist/ecg-cloud-linux.zip
+            心电云端平台/deploy/dist/ecg-cloud-linux.zip.sha256
+            心电云端平台/deploy/dist/MANIFEST.sha256
+            心电云端平台/deploy/dist/release-source.json
+          if-no-files-found: error
+          retention-days: 7
