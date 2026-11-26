@@ -3,7 +3,8 @@ var HealthAssistant=(()=>{
   const core=ECGHealth, native=document.documentElement.dataset.nativeApp==='android';
   const settingsKey='ecg-health-preferences-v1', accountKey='ecg-health-account-v1';
   let prefs=core.preferences(), period='month', trend=null, revision=0, pendingCredentials=null;
-  let tasks=[], taskBusy=false, startBusy=false, requestKey=null, autoReport=null, support=false, timer=null, lastRefresh=0;
+  let tasks=[], taskBusy=false, startBusy=false, pendingRequest=null, autoReport=null, support=false, timer=null, lastRefresh=0;
+  let deviceRevision=0, devices=[];
   try{prefs=core.preferences(JSON.parse(localStorage.getItem(settingsKey)||'{}'));}catch(_){}
   const setText=(id,value)=>{$(id).textContent=value;};
   const save=(key,value)=>{try{if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,JSON.stringify(value));return true;}catch(_){return false;}};
@@ -29,12 +30,12 @@ var HealthAssistant=(()=>{
   }
   function consumeCredentials(){const value=pendingCredentials;pendingCredentials=null;return value;}
   function forget(){save(accountKey,null);pendingCredentials=null;$('username').value='';$('password').value='';$('remember-account').checked=false;$('remember-password').checked=false;if(native)location.href='ecg-credentials://clear';setText('preferences-feedback',native?'已请求清除此手机保存的账号密码。':'已清除记住的账号；浏览器保存的密码请在浏览器密码管理器删除。');}
-  function clear(){revision++;trend=null;tasks=[];taskBusy=false;startBusy=false;requestKey=null;autoReport=null;support=false;pendingCredentials=null;clearInterval(timer);timer=null;$('health-chart').replaceChildren();$('trend-table-body').replaceChildren();$('measurement-tasks').replaceChildren();$('measurement-device').replaceChildren();for(const id of ['trend-total','trend-duration'])setText(id,'—');}
+  function clear(){revision++;deviceRevision++;devices=[];trend=null;tasks=[];taskBusy=false;startBusy=false;pendingRequest=null;autoReport=null;support=false;pendingCredentials=null;clearInterval(timer);timer=null;$('health-chart').replaceChildren();$('trend-table-body').replaceChildren();$('measurement-tasks').replaceChildren();$('measurement-device').replaceChildren();measurementControls();for(const id of ['trend-total','trend-duration'])setText(id,'—');}
   async function ready(){
     const epoch=state.epoch;
-    try{const response=await fetch('/health',{cache:'no-store'});const health=await response.json();if(!current(epoch))return;support=health.health_assistant_version>=1;}
+    try{const response=await fetch('/health',{cache:'no-store'});if(!response.ok)throw new Error('服务状态未读取成功');const health=await response.json();if(!current(epoch))return;support=health.health_assistant_version>=1;}
     catch(_){if(!current(epoch))return;support=false;}
-    $('measurement-start').disabled=!support;
+    measurementControls();clearInterval(timer);
     setText('health-capability',support?'选择时长，连接设备，完成一次有记录的测量。':'新版趋势与手机发起测量需要更新云端和采集终端。历史记录仍可查看。');
     if(support)loadTasks();
     timer=setInterval(()=>{if(!current(epoch)||document.hidden)return;if($('measurement-dialog').open)loadTasks();if(Date.now()-lastRefresh>prefs.refreshSeconds*1000){lastRefresh=Date.now();if($('trends-dialog').open)loadTrends();}},3000);
@@ -68,20 +69,38 @@ var HealthAssistant=(()=>{
     if(metric==='hr'&&!values.some(Number.isFinite))chart.append(svg('text',{x:width/2,y:94,'text-anchor':'middle',fill:'#577064','font-size':15},'暂无可信心率数据'));
     const body=$('trend-table-body');body.replaceChildren();for(const b of trend.buckets){const tr=document.createElement('tr');for(const value of [b.label,b.records,(b.duration_s/60).toFixed(1),b.hr_mean??'暂无']){const td=document.createElement('td');td.textContent=String(value);tr.append(td);}body.append(tr);}
   }
+  function measurementControls(){
+    const locked=!!pendingRequest||startBusy;
+    $('measurement-device').disabled=locked;$('measurement-duration').disabled=locked;
+    const selected=devices.find(d=>d.device_id===$('measurement-device').value);
+    $('measurement-start').disabled=startBusy||!support||(!pendingRequest&&(!selected||!core.readiness(selected).ready));
+    $('measurement-start').textContent=pendingRequest?'确认原测量请求':'开始测量';
+  }
   async function openMeasurement(){
-    $('measurement-dialog').showModal();$('measurement-duration').value=String(prefs.duration);$('measurement-confirm').checked=false;setText('measurement-feedback','正在读取设备…');
-    const epoch=state.epoch;const select=$('measurement-device');select.replaceChildren();
-    try{const payload=await(await api('/api/devices')).json();if(!current(epoch))return;for(const d of payload.devices||[]){const opt=document.createElement('option');opt.value=d.device_id;opt.textContent=(d.name||d.device_id)+' · '+(d.connection==='online'&&d.remote_ready?'可测量':'未就绪');opt.disabled=!(d.active&&d.connection==='online'&&d.remote_ready);select.append(opt);}const available=Array.from(select.options).find(o=>!o.disabled);select.value=available?.value||'';setText('measurement-feedback',available?'请确认电极贴好并选择测量时长。':'暂无就绪终端。请更新并启动树莓派程序，选择真实采集串口。');}
-    catch(e){if(current(epoch))setText('measurement-feedback','设备读取失败：'+e.message);}
-    if(current(epoch))loadTasks();
+    if(!$('measurement-dialog').open){$('measurement-dialog').showModal();$('measurement-duration').value=String(pendingRequest?.duration_s||prefs.duration);$('measurement-confirm').checked=false;}
+    await loadDevices();
+  }
+  async function loadDevices(){
+    const epoch=state.epoch,ticket=++deviceRevision,select=$('measurement-device'),previous=select.value;
+    const visible=()=>current(epoch)&&ticket===deviceRevision&&$('measurement-dialog').open;
+    devices=[];select.replaceChildren();measurementControls();setText('measurement-feedback','正在读取设备…');
+    try{
+      const payload=await(await api('/api/devices')).json();if(!visible())return;devices=payload.devices||[];
+      for(const d of devices){const status=core.readiness(d),opt=document.createElement('option');opt.value=d.device_id;opt.textContent=(d.name||d.device_id)+' · '+status.label;opt.disabled=!status.ready;select.append(opt);}
+      const available=devices.find(d=>d.device_id===previous&&core.readiness(d).ready)||devices.find(d=>core.readiness(d).ready);
+      select.value=pendingRequest?.device_id||available?.device_id||'';
+      setText('measurement-feedback',pendingRequest?'上次请求结果未确认。设备和时长已保留，请确认原请求，避免重复测量。':!devices.length?'此账号没有获授权的设备，请联系管理员分配设备。':available?core.readiness(available).hint:[...new Set(devices.map(d=>core.readiness(d).hint))].join(' '));
+    }catch(e){if(visible())setText('measurement-feedback','设备读取失败：'+e.message+'。请检查网络后刷新。');}
+    if(visible()){measurementControls();loadTasks();}
   }
   async function startMeasurement(event){
-    event.preventDefault();if(startBusy)return;if(!$('measurement-confirm').checked||!$('measurement-device').value){setText('measurement-feedback','请先选择可用设备并确认测量准备。');return;}
+    event.preventDefault();if(startBusy||!support)return;const selected=devices.find(d=>d.device_id===$('measurement-device').value);
+    if(!$('measurement-confirm').checked||(!pendingRequest&&(!selected||!core.readiness(selected).ready))){setText('measurement-feedback','请先选择可用设备并确认测量准备。');return;}
     const epoch=state.epoch;startBusy=true;$('measurement-start').disabled=true;
-    requestKey=requestKey||crypto.randomUUID();
-    try{const task=await jsonRequest('/api/measurements','POST',{device_id:$('measurement-device').value,duration_s:Number($('measurement-duration').value),request_key:requestKey});if(!current(epoch))return;autoReport=task.id;requestKey=null;setText('measurement-feedback','请求已发送，等待终端确认。测量计时由终端执行。');await loadTasks();}
-    catch(e){if(current(epoch))setText('measurement-feedback','发起测量未确认：'+e.message+'。重试会沿用同一请求，避免重复采集。');}
-    finally{if(current(epoch)){startBusy=false;$('measurement-start').disabled=!support;}}
+    pendingRequest=pendingRequest||{device_id:$('measurement-device').value,duration_s:Number($('measurement-duration').value),request_key:crypto.randomUUID()};measurementControls();
+    try{const task=await jsonRequest('/api/measurements','POST',{...pendingRequest});if(!current(epoch))return;autoReport=task.id;pendingRequest=null;setText('measurement-feedback','请求已确认。请查看下方终端状态；计时由终端执行。');await loadTasks();}
+    catch(e){if(current(epoch)){const rejected=[400,403,404,409,422].includes(e.status);if(rejected)pendingRequest=null;setText('measurement-feedback',rejected?'请求未接受：'+e.message+'。请检查设备并刷新后重试。':'发起测量未确认：'+e.message+'。请确认原请求；重试保持原设备、时长和请求编号。');}}
+    finally{if(current(epoch)){startBusy=false;measurementControls();}}
   }
   async function loadTasks(){
     if(taskBusy||!support||!state.ready)return;const epoch=state.epoch;taskBusy=true;
@@ -90,11 +109,11 @@ var HealthAssistant=(()=>{
     finally{if(current(epoch))taskBusy=false;}
   }
   function paintTasks(){
-    const parent=$('measurement-tasks');parent.replaceChildren();const names={queued:'等待终端',accepted:'准备采集',recording:'正在测量',uploading:'上传并生成报告',completed:'报告已就绪',failed:'需要检查',expired:'请求已过期'};
+    const parent=$('measurement-tasks');parent.replaceChildren();const names={queued:'等待终端',accepted:'准备采集',recording:'正在测量',uploading:'正在上传记录',completed:'记录已上传',failed:'需要检查',expired:'请求已过期'};
     for(const task of tasks){const card=document.createElement('article');card.className='measurement-task';const title=document.createElement('h3');title.textContent=task.duration_s/60+' 分钟 · '+(names[task.status]||task.status);const message=document.createElement('p');message.textContent=task.message;card.append(title,message);if(task.status==='recording'){const bar=document.createElement('progress');bar.removeAttribute('value');bar.setAttribute('aria-label','终端正在按选定时长采集');card.append(bar);}if(task.status==='completed'&&task.session_id){const button=document.createElement('button');button.className='button secondary';button.textContent='查看测量报告';button.onclick=()=>openTaskReport(task);card.append(button);}parent.append(card);}
   }
   async function openTaskReport(task){
-    const epoch=state.epoch;setText('measurement-feedback','正在准备报告…');
+    const epoch=state.epoch;setText('measurement-feedback','记录已上传，正在提交分析并打开报告；分析状态以报告页面为准。');
     try{
       // Each task type is independently deduplicated by the server; failures stay visible in the report.
       await Promise.allSettled(['analysis-jobs','physiology-jobs'].map(kind=>api('/api/sessions/'+encodeURIComponent(task.session_id)+'/'+kind,{method:'POST'})));
@@ -109,13 +128,14 @@ var HealthAssistant=(()=>{
   for(const name of ['trends','measurement','preferences'])$(name+'-close').onclick=()=>$(name+'-dialog').close();
   for(const button of document.querySelectorAll('[data-trend-period]'))button.onclick=()=>{period=button.dataset.trendPeriod;for(const b of document.querySelectorAll('[data-trend-period]'))b.setAttribute('aria-pressed',String(b===button));loadTrends();};
   $('trend-anchor').value=core.day();$('trend-anchor').onchange=loadTrends;$('trend-metric').onchange=paintTrend;$('trends-refresh').onclick=loadTrends;
-  $('measurement-form').onsubmit=startMeasurement;$('measurement-reload').onclick=openMeasurement;
-  for(const id of ['measurement-device','measurement-duration'])$(id).onchange=()=>{requestKey=null;};
+  $('measurement-form').onsubmit=startMeasurement;$('measurement-reload').onclick=loadDevices;
+  $('measurement-dialog').addEventListener('close',()=>{deviceRevision++;});
+  $('measurement-device').onchange=()=>{measurementControls();const selected=devices.find(d=>d.device_id===$('measurement-device').value);if(selected&&!pendingRequest)setText('measurement-feedback',core.readiness(selected).hint);};
   $('preferences-form').onsubmit=event=>{event.preventDefault();prefs=core.preferences({textSize:$('preference-text').value,contrast:$('preference-contrast').value,refreshSeconds:$('preference-refresh').value,duration:$('preference-duration').value});apply();setText('preferences-feedback',save(settingsKey,prefs)?'设置已保存。':'设置已应用，但此设备不允许保存，下次打开将恢复默认。');};
   $('forget-login').onclick=forget;
   $('remember-password').onchange=()=>{if($('remember-password').checked)$('remember-account').checked=true;};
   $('remember-account').onchange=()=>{if(!$('remember-account').checked){$('remember-password').checked=false;save(accountKey,null);if(native)location.href='ecg-credentials://clear';}};
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&state.ready&&support)loadTasks();});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&state.ready&&support){loadTasks();if($('measurement-dialog').open)loadDevices();}});
   apply();if(!$('login-panel').hidden)loginShown();if(state.ready)ready();
   return {clear,ready,loginShown,loginSuccess,restoreLogin,consumeCredentials,forget,openPreferences};
 })();
