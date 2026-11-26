@@ -176,7 +176,7 @@ var UserExperience = (() => {
   },{passive:true});
   document.addEventListener('touchend',()=>{const ready=pull?.ready;pull=null;if(ready)refreshManually();else text('pull-feedback','');},{passive:true});
   document.addEventListener('touchcancel',()=>{pull=null;text('pull-feedback','');},{passive:true});
-  text('app-version',document.documentElement.dataset.nativeApp==='android'?'Android 1.1.0':'网页版 · 界面 1.1.0');
+  text('app-version',document.documentElement.dataset.nativeApp==='android'?'Android 1.1.1':'网页版 · 界面 1.1.1');
   $('record-details').open=!window.matchMedia('(max-width: 720px)').matches;
   renderTimes();renderSummary();
   return {clear,clearReport,selectionChanged,listUpdated,listFailed,detailUpdated,detailFailed,renderSummary,renderDevices,printDocument,openReport,refreshManually,quickRange};
