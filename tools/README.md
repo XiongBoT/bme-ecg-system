@@ -10,6 +10,8 @@
 | [sync_docs.py](sync_docs.py) | 从 Markdown 生成两个离线 README，并从报告 JSON 生成结果摘要；`--check` 检查同步 |
 | [test_documentation.py](test_documentation.py) | 文档检查器与生成同步的回归用例 |
 | [test_repository_policy.py](test_repository_policy.py) | 仓库策略检查器的回归用例 |
+| [prepare_cloud_release.py](prepare_cloud_release.py) | 仅供手动发布工作流核对所有者、准确 main 提交及质量检查后，复用云端白名单准备源码包与来源记录；不部署 |
+| [test_cloud_release.py](test_cloud_release.py) | 发布权限、版本、检查结果和来源记录的边界验证 |
 
 按 [开发环境](../README.md#开发环境) 安装依赖后，从**仓库根目录**执行：
 
