@@ -1,62 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1030" viewBox="0 0 800 1030" role="img" aria-labelledby="title desc">
-  <title id="title">从测量到报告的六个阶段</title>
-  <desc id="desc">依次完成账号与设备准备、选择终端或手机测量、现场采集、保存总结、上传分析、回看复核与导出。手机固定时长测量需各端版本配套。断网时已保存记录保留在终端，恢复连接后可补传。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="550" viewBox="0 0 640 550" role="img" aria-labelledby="title desc">
+  <title id="title">手机发起测量的交互时序</title>
+  <desc id="desc">手机向云端提交固定时长测量请求；树莓派轮询领取，执行采集和本地保存后分块上传。云端校验上传，再按设置或用户操作提交分类和 QRS/RR 分析。客户端查询状态并获得记录和结果。上传完成与分析完成分别判断。</desc>
   <defs>
     <style>
-      text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif; }
-      .heading { font-size: 34px; font-weight: 700; fill: #152d40; }
-      .step { font-size: 29px; font-weight: 700; fill: #183d49; }
-      .detail { font-size: 23px; fill: #45626e; }
-      .number { font-family: "Segoe UI", sans-serif; font-size: 26px; font-weight: 700; fill: #ffffff; text-anchor: middle; }
-      .caption { font-size: 22px; fill: #455d6b; }
+      text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif; fill: #20262d; text-anchor: middle; }
+      .name { font-size: 22px; font-weight: 600; }
+      .label { font-size: 19px; }
+      .box { fill: #fff; stroke: #46515c; stroke-width: 1.5; }
+      .life { stroke: #abb2b9; stroke-width: 1; stroke-dasharray: 4 5; }
+      .message { fill: none; stroke: #46515c; stroke-width: 1.5; marker-end: url(#arrow); }
+      .return { stroke-dasharray: 6 4; }
     </style>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#70938f"/>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#46515c"/>
     </marker>
   </defs>
-  <rect width="800" height="1030" rx="24" fill="#f5f8fa"/>
-  <text x="40" y="62" class="heading">一次测量，怎样形成一份报告？</text>
-  <text x="40" y="102" class="caption">固定时长测量需云端、终端与应用版本配套</text>
+  <rect width="640" height="550" fill="#fff"/>
+  <rect class="box" x="15" y="20" width="140" height="50"/>
+  <text class="name" x="85" y="52">手机 / Web</text>
+  <rect class="box" x="250" y="20" width="140" height="50"/>
+  <text class="name" x="320" y="52">云端平台</text>
+  <rect class="box" x="485" y="20" width="140" height="50"/>
+  <text class="name" x="555" y="52">树莓派终端</text>
+  <path class="life" d="M 85 70 V 540 M 320 70 V 540 M 555 70 V 540"/>
 
-  <rect x="32" y="132" width="736" height="110" rx="17" fill="#ffffff" stroke="#cadddf" stroke-width="2"/>
-  <circle cx="92" cy="187" r="29" fill="#087f71"/>
-  <text x="92" y="196" class="number">01</text>
-  <text x="148" y="177" class="step">准备账号与设备</text>
-  <text x="148" y="214" class="detail">审核账号 · 授权设备 · 核对端口与存储</text>
-  <path d="M 92 244 V 267" stroke="#70938f" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path class="message" d="M 85 125 H 319"/>
+  <text class="label" x="202" y="108">提交测量请求</text>
+  <path class="message" d="M 555 190 H 321"/>
+  <text class="label" x="438" y="173">轮询并领取请求</text>
 
-  <rect x="32" y="276" width="736" height="110" rx="17" fill="#ffffff" stroke="#cadddf" stroke-width="2"/>
-  <circle cx="92" cy="331" r="29" fill="#087f71"/>
-  <text x="92" y="340" class="number">02</text>
-  <text x="148" y="321" class="step">选择测量方式</text>
-  <text x="148" y="358" class="detail">终端手动 / 定时，或手机发起 1 / 3 / 5 分钟</text>
-  <path d="M 92 388 V 411" stroke="#70938f" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <rect class="box" x="549" y="224" width="12" height="78"/>
+  <path class="message" d="M 561 237 H 610 V 288 H 562"/>
+  <text class="label" x="530" y="258" style="text-anchor:end">采集并保存</text>
+  <text class="label" x="530" y="284" style="text-anchor:end">1 / 3 / 5 min</text>
 
-  <rect x="32" y="420" width="736" height="110" rx="17" fill="#edf4ff" stroke="#c4d6ef" stroke-width="2"/>
-  <circle cx="92" cy="475" r="29" fill="#2a5fa4"/>
-  <text x="92" y="484" class="number">03</text>
-  <text x="148" y="465" class="step">现场采集与提示</text>
-  <text x="148" y="502" class="detail">树莓派显示波形、心率与信号质量</text>
-  <path d="M 92 532 V 555" stroke="#70938f" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path class="message" d="M 555 340 H 321"/>
+  <text class="label" x="438" y="323">上传记录 · 完成校验</text>
 
-  <rect x="32" y="564" width="736" height="110" rx="17" fill="#edf4ff" stroke="#c4d6ef" stroke-width="2"/>
-  <circle cx="92" cy="619" r="29" fill="#2a5fa4"/>
-  <text x="92" y="628" class="number">04</text>
-  <text x="148" y="609" class="step">结束保存与总结</text>
-  <text x="148" y="646" class="detail">保存原始采样，核对实际时长与质量</text>
-  <path d="M 92 676 V 699" stroke="#70938f" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <rect class="box" x="314" y="368" width="12" height="58"/>
+  <path class="message" d="M 326 378 H 370 V 416 H 327"/>
+  <text class="label" x="295" y="391" style="text-anchor:end">提交分析任务¹</text>
+  <text class="label" x="295" y="417" style="text-anchor:end">分类 / QRS-RR</text>
 
-  <rect x="32" y="708" width="736" height="110" rx="17" fill="#e9f6f2" stroke="#b9dcd1" stroke-width="2"/>
-  <circle cx="92" cy="763" r="29" fill="#087f71"/>
-  <text x="92" y="772" class="number">05</text>
-  <text x="148" y="753" class="step">上传记录并分析</text>
-  <text x="148" y="790" class="detail">分块上传；分类与 QRS/RR 分别排队</text>
-  <path d="M 92 820 V 843" stroke="#70938f" stroke-width="2.5" marker-end="url(#arrow)"/>
-
-  <rect x="32" y="852" width="736" height="110" rx="17" fill="#fff6e7" stroke="#ead8b7" stroke-width="2"/>
-  <circle cx="92" cy="907" r="29" fill="#95601d"/>
-  <text x="92" y="916" class="number">06</text>
-  <text x="148" y="897" class="step">回看、复核与导出</text>
-  <text x="148" y="934" class="detail">本人记录与趋势 · 片段标注 · CSV / 报告</text>
-  <text x="40" y="1005" class="caption">断网时保留已保存记录；恢复连接后可补传。</text>
+  <path class="message" d="M 85 466 H 319"/>
+  <text class="label" x="202" y="449">查询状态与结果</text>
+  <path class="message return" d="M 320 520 H 86"/>
+  <text class="label" x="202" y="503">返回记录与分析状态</text>
 </svg>

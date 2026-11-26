@@ -1,70 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1110" viewBox="0 0 800 1110" role="img" aria-labelledby="title desc">
-  <title id="title">心电系统总览：从采集硬件到云端与多端访问</title>
-  <desc id="desc">AD8232 与 STM32 以 360 Hz 采集，通过七字节串口帧交给树莓派。多台树莓派分别保存并通过 HTTPS 上传到云端。Android、Windows 和浏览器登录后访问本人记录。手机测量请求由云端登记，终端轮询领取；管理员管理账号、设备和元信息。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="540" viewBox="0 0 640 540" role="img" aria-labelledby="title desc">
+  <title id="title">心电系统结构与接口</title>
+  <desc id="desc">AD8232 输出模拟信号，STM32 以 360 Hz 采样，通过七字节串口帧传给树莓派。树莓派本地保存并通过 HTTPS 上传云端。客户端查询本人记录；测量请求由客户端提交云端，终端轮询领取。实线表示数据流，虚线表示测量控制方向。</desc>
   <defs>
     <style>
-      text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif; }
-      .heading { font-size: 34px; font-weight: 700; fill: #152d40; }
-      .kicker { font-size: 21px; font-weight: 700; letter-spacing: 1px; }
-      .name { font-size: 31px; font-weight: 700; }
-      .body { font-size: 24px; }
-      .caption { font-size: 22px; fill: #455d6b; }
-      .icon { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+      text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif; fill: #20262d; text-anchor: middle; }
+      .name { font-size: 23px; font-weight: 600; }
+      .detail { font-size: 19px; }
+      .label { font-size: 18px; }
+      .box { fill: #fff; stroke: #46515c; stroke-width: 1.5; }
+      .line { fill: none; stroke: #46515c; stroke-width: 1.5; marker-end: url(#arrow); }
+      .control { stroke-dasharray: 6 4; }
     </style>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5b7784"/>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#46515c"/>
     </marker>
   </defs>
-  <rect width="800" height="1110" rx="24" fill="#f5f8fa"/>
-  <text x="40" y="63" class="heading">一套采集链路，多端共享记录</text>
-  <text x="40" y="103" class="caption">系统总览 · 实线箭头表示数据流向</text>
+  <rect width="640" height="540" fill="#fff"/>
 
-  <rect x="32" y="132" width="736" height="164" rx="18" fill="#e9f6f2" stroke="#b9dcd1" stroke-width="2"/>
-  <text x="56" y="169" class="kicker" fill="#087f71">01 / 采集硬件</text>
-  <text x="56" y="216" class="name" fill="#163e39">AD8232 → STM32F103C8</text>
-  <text x="56" y="262" class="body" fill="#315951">获取心电信号 · 360 Hz 定时采样</text>
-  <g class="icon" stroke="#087f71" transform="translate(654 166)">
-    <rect x="18" y="12" width="66" height="64" rx="7"/>
-    <path d="M 31 12 V 2 M 51 12 V 2 M 71 12 V 2 M 31 76 V 86 M 51 76 V 86 M 71 76 V 86 M 18 26 H 8 M 18 44 H 8 M 18 62 H 8 M 84 26 H 94 M 84 44 H 94 M 84 62 H 94"/>
-    <path d="M 29 45 H 39 L 44 32 L 51 58 L 59 41 H 73"/>
-  </g>
-  <path d="M 400 300 V 340" stroke="#5b7784" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="426" y="329" class="caption">七字节串口帧</text>
+  <rect class="box" x="40" y="20" width="220" height="68"/>
+  <text class="name" x="150" y="49">AD8232</text>
+  <text class="detail" x="150" y="75">心电模拟前端</text>
+  <rect class="box" x="380" y="20" width="220" height="68"/>
+  <text class="name" x="490" y="49">STM32F103C8</text>
+  <text class="detail" x="490" y="75">ADC · 360 Hz</text>
+  <path class="line" d="M 260 60 H 379"/>
+  <text class="label" x="320" y="47">模拟信号</text>
 
-  <rect x="32" y="354" width="736" height="164" rx="18" fill="#edf4ff" stroke="#c4d6ef" stroke-width="2"/>
-  <text x="56" y="391" class="kicker" fill="#2a5fa4">02 / 多台采集终端</text>
-  <text x="56" y="438" class="name" fill="#1b3c66">树莓派：现场处理与保存</text>
-  <text x="56" y="484" class="body" fill="#3f5d7d">波形与质量提示 · 端侧分析 · 测后总结</text>
-  <g class="icon" stroke="#2a5fa4" transform="translate(654 388)">
-    <path d="M 19 7 H 90 V 57 M 9 17 H 80 V 67" opacity="0.5"/>
-    <rect x="0" y="27" width="70" height="50" rx="5"/>
-    <path d="M 35 77 V 87 M 20 87 H 50 M 10 53 H 21 L 26 43 L 33 64 L 40 50 H 60"/>
-  </g>
-  <path d="M 400 522 V 562" stroke="#5b7784" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="426" y="551" class="caption">HTTPS 分块上传</text>
+  <path class="line" d="M 490 88 V 144"/>
+  <text class="label" x="470" y="121" style="text-anchor:end">UART · 115200 · 7 B/点</text>
+  <rect class="box" x="40" y="145" width="560" height="68"/>
+  <text class="name" x="320" y="174">树莓派终端（可接入多台）</text>
+  <text class="detail" x="320" y="200">波形显示 · 质量判断 · 原始记录保存</text>
 
-  <rect x="32" y="576" width="736" height="184" rx="18" fill="#123f46"/>
-  <text x="56" y="613" class="kicker" fill="#9ce4d5">03 / 统一云端平台</text>
-  <text x="56" y="660" class="name" fill="#ffffff">记录存储 · 后台分析 · 平台管理</text>
-  <text x="56" y="703" class="body" fill="#d9efed">账号与设备授权 / 记录隔离 / 分类与 QRS-RR</text>
-  <text x="56" y="738" class="body" fill="#d9efed">任务与复核 / 片段标注 / 检查与备份</text>
-  <g class="icon" stroke="#9ce4d5" transform="translate(663 601)">
-    <path d="M 16 41 C -3 41 -3 16 16 15 C 19 -7 51 -5 55 14 C 76 6 89 40 66 41 Z"/>
-    <path d="M 31 27 L 39 19 L 47 27 M 39 19 V 41"/>
-  </g>
-  <path d="M 400 764 V 804" stroke="#5b7784" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="426" y="793" class="caption">本人记录与结果</text>
+  <path class="line" d="M 200 213 V 279"/>
+  <text class="label" x="180" y="253" style="text-anchor:end">HTTPS 分块上传</text>
+  <path class="line control" d="M 440 280 V 214"/>
+  <text class="label" x="460" y="253" style="text-anchor:start">轮询领取请求</text>
+  <rect class="box" x="40" y="280" width="560" height="84"/>
+  <text class="name" x="320" y="311">云端平台</text>
+  <text class="detail" x="320" y="341">记录存储 · 分类与 QRS/RR · 管理与备份</text>
 
-  <rect x="32" y="818" width="736" height="164" rx="18" fill="#fff6e7" stroke="#ead8b7" stroke-width="2"/>
-  <text x="56" y="855" class="kicker" fill="#95601d">04 / 手机与电脑</text>
-  <text x="56" y="902" class="name" fill="#674820">Android · Windows · 浏览器</text>
-  <text x="56" y="948" class="body" fill="#765f3e">登录同一平台 · 回看波形、趋势与报告</text>
-  <g class="icon" stroke="#95601d" transform="translate(654 845)">
-    <rect x="22" y="5" width="69" height="48" rx="5"/>
-    <path d="M 56 53 V 65 M 42 65 H 72"/>
-    <rect x="0" y="30" width="32" height="57" rx="5" fill="#fff6e7"/>
-    <path d="M 12 78 H 20 M 9 39 H 23"/>
-  </g>
-  <text x="40" y="1032" class="caption">控制路径：手机提交 → 云端登记 → 终端轮询领取</text>
-  <text x="40" y="1070" class="caption">管理员管理账号、设备与元信息；个人波形按账号隔离。</text>
+  <path class="line" d="M 200 364 V 429"/>
+  <text class="label" x="180" y="402" style="text-anchor:end">本人记录与结果</text>
+  <path class="line control" d="M 440 430 V 365"/>
+  <text class="label" x="460" y="402" style="text-anchor:start">提交测量请求</text>
+  <rect class="box" x="40" y="430" width="560" height="68"/>
+  <text class="name" x="320" y="459">Android · Windows · Web</text>
+  <text class="detail" x="320" y="486">记录查询 · 历史趋势 · 报告查看</text>
+
+  <path class="line" d="M 114 525 H 154"/>
+  <text class="label" x="205" y="531">数据流</text>
+  <path class="line control" d="M 354 525 H 394"/>
+  <text class="label" x="462" y="531">测量控制</text>
 </svg>
