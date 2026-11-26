@@ -11,6 +11,7 @@
 !/tools/
 !/树莓派心电终端/
 !/心电云端平台/
+!/heartlife/
 !/硬件/
 /硬件/*
 !/硬件/README.md
@@ -24,6 +25,11 @@
 **/.cloud_private/
 **/.test_runs/
 **/node_modules/
+**/playwright-report/
+**/test-results/
+**/blob-report/
+**/*.tsbuildinfo
+**/docs/screenshots/
 **/work/
 **/outputs/
 **/evidence/
