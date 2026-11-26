@@ -36,11 +36,11 @@ jobs:
       - run: python tools/sync_docs.py --check
       - name: Verify benchmark report matches its JSON evidence
         run: python '心电云端平台/research/render_benchmark.py' --qrs 'docs/algorithm-validation/qrs-comparison.json' --classification 'docs/algorithm-validation/classification-benchmark.json' --output 'docs/algorithm-validation/算法对比与分类评测.md' --check
-    - name: Verify classification diagnostics and error conservation
-      working-directory: 心电云端平台
-      run: |
-        python -m unittest discover -s tests -p test_classification_diagnostics.py -v
-        python -m research.classification_diagnostics --check
+      - name: Verify classification diagnostics and error conservation
+        working-directory: 心电云端平台
+        run: |
+          python -m unittest discover -s tests -p test_classification_diagnostics.py -v
+          python -m research.classification_diagnostics --check
 
   python:
     name: Python (${{ matrix.suite }})
