@@ -113,7 +113,7 @@ def main():
             if not key.exists(): password.unlink()
             raise
     output=ROOT/'dist';output.mkdir(exist_ok=True)
-    signed=build/'ecg-records-1.1.0.apk'
+    signed=build/'ecg-records-1.1.1.apk'
     signing_env=os.environ.copy()
     signing_env['ECG_APK_SIGNING_PASSWORD']=password.read_text(encoding='ascii').strip()
     run(java,'-jar',tools/'lib/apksigner.jar','sign','--ks',key,'--ks-key-alias','ecg-release',
