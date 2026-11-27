@@ -1,6 +1,7 @@
 """Prepare an owner-approved main source bundle; never connect to the server."""
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib.util
 import json
@@ -130,7 +131,7 @@ def verify_checkout(root: Path, sha: str) -> None:
     git(root, 'ls-files', '--error-unmatch', '--', '心电云端平台/deploy/package_cloud.py')
 
 
-def prepare(root: Path, env: dict[str, str], get=None) -> dict:
+def prepare(root: Path, env: dict[str, str], get=None, *, include_heartlife: bool = False) -> dict:
     sha = validate_context(env)
     root = root.resolve()
     verify_checkout(root, sha)
@@ -163,25 +164,40 @@ def prepare(root: Path, env: dict[str, str], get=None) -> dict:
     (output / 'release-source.json').write_text(
         json.dumps(provenance, ensure_ascii=False, indent=2) + '\n', encoding='utf-8',
     )
+    if include_heartlife:
+        import package_system_release
+
+        system = package_system_release.build(root, output, sha)
+        provenance = {**provenance, **system}
+        (output / 'system-release-source.json').write_text(
+            json.dumps(provenance, ensure_ascii=False, indent=2) + '\n', encoding='utf-8',
+        )
     summary = (
         '## Cloud source bundle prepared\n\n'
         '**Status: prepared-not-deployed. No server was connected or changed.**\n\n'
         f'- Source: `{sha}`\n'
         f'- Quality evidence: {quality["html_url"]}\n'
-        f'- Archive SHA-256: `{digest}`\n'
-        f'- Manifest SHA-256: `{manifest_digest}`\n\n'
+        f'- Archive: `{provenance["archive"]}`\n'
+        f'- Archive SHA-256: `{provenance["archive_sha256"]}`\n'
+        f'- Manifest SHA-256: `{provenance["manifest_sha256"]}`\n\n'
         'XiongBoT must verify the package, backup and maintenance window before deployment.\n'
     )
     if env.get('GITHUB_STEP_SUMMARY'):
         with Path(env['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as stream:
             stream.write(summary)
-    print(f'Prepared source {sha}; status=prepared-not-deployed; archive SHA-256={digest}')
+    print(f'Prepared source {sha}; status=prepared-not-deployed; '
+          f'archive={provenance["archive"]}; SHA-256={provenance["archive_sha256"]}')
     return provenance
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--with-heartlife', action='store_true',
+                        help='Also package HeartLife backend and its same-commit frontend build')
+    args = parser.parse_args()
     try:
-        prepare(Path(__file__).resolve().parents[1], dict(os.environ))
+        prepare(Path(__file__).resolve().parents[1], dict(os.environ),
+                include_heartlife=args.with_heartlife)
     except (ReleaseError, OSError, ValueError) as exc:
         print(f'Cloud bundle preparation stopped: {exc}', file=sys.stderr)
         return 1

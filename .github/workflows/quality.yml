@@ -183,7 +183,9 @@ jobs:
         working-directory: heartlife/frontend
         run: |
           npm run test -- --run
-          VITE_BASE_PATH=/heartlife/ npm run build
+          VITE_BASE_PATH=/heartlife/ VITE_RELEASE_SHA="$GITHUB_SHA" npm run build
+      - name: Verify unified runtime bundle from the real frontend build
+        run: python tools/package_system_release.py --check
 
   gate:
     name: Quality gate

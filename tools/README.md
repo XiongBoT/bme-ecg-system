@@ -12,6 +12,8 @@
 | [test_repository_policy.py](test_repository_policy.py) | 仓库策略检查器的回归用例 |
 | [prepare_cloud_release.py](prepare_cloud_release.py) | 仅供手动发布工作流核对所有者、准确 main 提交及质量检查后，复用云端白名单准备源码包与来源记录；不部署 |
 | [test_cloud_release.py](test_cloud_release.py) | 发布权限、版本、检查结果和来源记录的边界验证 |
+| [package_system_release.py](package_system_release.py) | 从干净提交打包心电云端、心伴后端与同 SHA 的生产前端；校验静态入口和整包清单 |
+| [test_system_release.py](test_system_release.py) | 统一包的版本错配、缺失资源、链接、白名单、清单与兼容交付测试 |
 
 按 [开发环境](../README.md#开发环境) 安装依赖后，从**仓库根目录**执行：
 
@@ -28,6 +30,8 @@
 省略 `--suite` 会依次执行三个套件。两个 Python 工程由独立进程和工作目录运行，避免同名模块相互影响；网页测试需要 Node.js，Tk 界面测试需要显示环境。
 
 发布前的 Windows/Android 打包检查与完整 CI 覆盖范围见 [协作质量与发布](../docs/协作质量与发布.md)。本机软件检查不替代 STM32 编译或实物联调。
+
+云端与心伴使用[统一部署](../docs/统一部署.md)流程：前端以 `VITE_BASE_PATH=/heartlife/`、`VITE_RELEASE_SHA=完整提交SHA` 构建，`package_system_release.py --check` 验证真实产物。所有者发布入口 `prepare_cloud_release.py --with-heartlife` 在原云端包之外生成统一包及独立来源记录；不加参数保留原单模块行为。
 
 算法研究另有 `Algorithm evaluation tests`：安装云端 `requirements-research.txt` 后运行 `tests/*benchmark*.py`，检查同输入、匹配边界、分类分母、断流及报告一致性，不下载公开心电数据库。全量数据实验按[研究工具](../心电云端平台/research/README.md)独立执行，不在每次 CI 中重复长时评测。
 
