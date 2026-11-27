@@ -28,8 +28,8 @@
 | --- | --- | --- |
 | 心电网页回归 | PASS | `node --test 心电云端平台/tests/*.test.cjs`：退出码 0，190 项通过、0 跳过；包括 15 项授权页测试 |
 | 心电 Python 局部回归 | PASS | 短程 `unittest`：31 项通过，命令退出码均为 0，覆盖 5 项新测量、1 项旧表迁移、13 项原桥接、10 项原健康助手与 2 项趋势测试；首次新测试执行退出码 1，原因是尚未实现接口及本地缺少时区数据 |
-| Python 与双服务完整契约 | IN_PROGRESS | 新增旧授权、幂等、设备隔离、周边界、撤销竞态与报告状态用例；周统计涉及本地缺少的 `tzdata`，完整运行结果待 GitHub Actions |
-| 心伴前端回归与生产构建 | IN_PROGRESS | 新增测量和私人周报用例；完整 Vitest、类型检查及 `/heartlife/` 构建结果待 GitHub Actions |
+| Python 与双服务完整契约 | PASS | [CI 45932330193](https://github.com/XiongBoT/bme-ecg-system/actions/runs/45932330193)：心伴 `python -m pytest -q` 退出码 0，127 项通过；心电云端 257 项、10 项按环境跳过，退出码 0；周统计、旧授权、幂等、撤销竞态均已运行 |
+| 心伴前端回归与生产构建 | IN_PROGRESS | 首次 CI Vitest 退出码 1：54 项通过、2 项旧周报测试失败；新增 15 项全部通过。修正旧测试登录及请求模拟后，重跑完整 Vitest、类型检查与 `/heartlife/` 构建 |
 | 真实设备、手机视觉及生产部署 | DEFERRED | 本轮没有执行，不以自动化测试替代 |
 | 仓库与文档工具 | PASS | `python -m unittest discover -s tools -p 'test_*.py' -v`：退出码 0，26 项通过；文档链接及生成文件检查退出码 0 |
 

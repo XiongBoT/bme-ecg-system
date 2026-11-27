@@ -380,6 +380,11 @@ describe('UI-04 Encyclopedia & Weekly Report Redesign Suite', () => {
   it('UI-T22: WeeklyReportView embeds ChartWithDataTable, distinguishes null (尚未记录) from 0 (0 分钟), and formats no-plan & partial-week states', async () => {
     const router = makeRouter('/weekly-report')
     await router.isReady()
+    useAuthStore().user = {
+      id: 'weekly-reader', account: 'alice', nickname: '林晓禾', bio: '',
+      timezone: 'Asia/Shanghai', roles: ['member'], is_demo: true,
+      created_at: '2026-11-26T00:00:00Z',
+    }
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       jsonResponse({
@@ -436,5 +441,6 @@ describe('UI-04 Encyclopedia & Weekly Report Redesign Suite', () => {
     expect(rows[1].text()).toContain('480 分钟')
     expect(rows[1].text()).toContain('尚未记录')
     expect(rows[1].text()).toContain('1 / 2')
+    wrapper.unmount()
   })
 })
