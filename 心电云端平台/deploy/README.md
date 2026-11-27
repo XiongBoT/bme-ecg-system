@@ -2,13 +2,14 @@
 
 [云端首页](../README.md) · [云端文档](../docs/README.md) · [版本与发布流程](../../docs/协作质量与发布.md)
 
-先读[部署与升级](../docs/部署与升级.md)，再选择构建目标。当前功能和实际安装包分别核对[交付状态](../../docs/版本与交付状态.md)；本目录保留的旧安装流程有各自适用范围。
+当前服务器采用[统一部署](../../docs/统一部署.md)，同一提交交付心电云端、心伴后端及生产前端。再按[部署与升级](../docs/部署与升级.md)选择终端或客户端构建目标。当前功能和实际安装包分别核对[交付状态](../../docs/版本与交付状态.md)；本目录保留的旧安装流程有各自适用范围。
 
 ## 按目标查阅
 
 | 目标 | 说明 | 主要文件 |
 | --- | --- | --- |
-| Linux 云服务器 | [部署说明](linux/部署说明.txt) | [linux/](linux/)、[源码打包](package_cloud.py) |
+| 当前统一服务器 | [统一部署](../../docs/统一部署.md) | [统一打包](../../tools/package_system_release.py) |
+| 仅心电 Linux 服务 | [独立初装说明](linux/部署说明.txt) | [linux/](linux/)、[单模块源码打包](package_cloud.py) |
 | 手机公网 HTTPS | [手机公网访问](linux/手机公网访问说明.txt) | [公开入口配置](prepare_public.py) |
 | Windows 免安装客户端 | [使用与构建](desktop/README.md)、[用户说明](desktop/使用说明.txt) | [桌面打包](package_desktop.py)、[启动器](desktop/Launcher.cs) |
 | Android 客户端 | [安卓工程说明](../android/README.md) | [android/](../android/) |
