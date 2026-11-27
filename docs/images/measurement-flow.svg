@@ -1,49 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="550" viewBox="0 0 640 550" role="img" aria-labelledby="title desc">
-  <title id="title">手机发起测量的交互时序</title>
-  <desc id="desc">手机向云端提交固定时长测量请求；树莓派轮询领取，执行采集和本地保存后分块上传。云端校验上传，再按设置或用户操作提交分类和 QRS/RR 分析。客户端查询状态并获得记录和结果。上传完成与分析完成分别判断。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1190" viewBox="0 0 1000 1190" role="img" aria-labelledby="title desc">
+  <title id="title">工作台或心伴发起测量的交互时序</title>
+  <desc id="desc">两种入口择一：工作台向心电云端提交请求，或心伴在主动绑定并另行授权后经心伴服务提交请求。树莓派轮询领取，实际采集并保存后上传。上传校验成功不表示分析完成；用户操作或已开启的自动分析设置才触发分类与 QRS/RR 任务。工作台查看波形和结果，心伴只查询授权范围内的摘要与状态，详情回到原工作台。</desc>
   <defs>
     <style>
-      text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif; fill: #20262d; text-anchor: middle; }
-      .name { font-size: 22px; font-weight: 600; }
-      .label { font-size: 19px; }
-      .box { fill: #fff; stroke: #46515c; stroke-width: 1.5; }
-      .life { stroke: #abb2b9; stroke-width: 1; stroke-dasharray: 4 5; }
-      .message { fill: none; stroke: #46515c; stroke-width: 1.5; marker-end: url(#arrow); }
-      .return { stroke-dasharray: 6 4; }
+      text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif; fill: #203444; text-anchor: middle; }
+      .title { font-size: 30px; font-weight: 700; }
+      .name { font-size: 25px; font-weight: 700; }
+      .label { font-size: 22px; }
+      .note { font-size: 20px; fill: #526776; }
+      .box { fill: #fff; stroke: #6c8292; stroke-width: 1.5; rx: 8; }
+      .life { fill: none; stroke: #a7b7c2; stroke-width: 1.2; stroke-dasharray: 4 6; }
+      .message { fill: none; stroke: #286a85; stroke-width: 2; marker-end: url(#arrow); }
+      .return { stroke-dasharray: 7 5; }
     </style>
-    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
-      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#46515c"/>
-    </marker>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 8 4 L 0 8 Z" fill="#286a85"/></marker>
   </defs>
-  <rect width="640" height="550" fill="#fff"/>
-  <rect class="box" x="15" y="20" width="140" height="50"/>
-  <text class="name" x="85" y="52">手机 / Web</text>
-  <rect class="box" x="250" y="20" width="140" height="50"/>
-  <text class="name" x="320" y="52">云端平台</text>
-  <rect class="box" x="485" y="20" width="140" height="50"/>
-  <text class="name" x="555" y="52">树莓派终端</text>
-  <path class="life" d="M 85 70 V 540 M 320 70 V 540 M 555 70 V 540"/>
+  <rect width="1000" height="1190" fill="#fff"/>
+  <text class="title" x="500" y="43">一次远程测量的请求与结果</text>
+  <text class="note" x="500" y="76">前提：本人账号有效、设备已授权且就绪，各端版本配套</text>
 
-  <path class="message" d="M 85 125 H 319"/>
-  <text class="label" x="202" y="108">提交测量请求</text>
-  <path class="message" d="M 555 190 H 321"/>
-  <text class="label" x="438" y="173">轮询并领取请求</text>
+  <rect class="box" x="35" y="102" width="190" height="70"/>
+  <text class="name" x="130" y="131">使用者</text>
+  <text class="note" x="130" y="157">工作台 / 心伴网页</text>
+  <rect class="box" x="280" y="102" width="190" height="70" style="fill:#f5f7ef"/>
+  <text class="name" x="375" y="131">心伴服务</text>
+  <text class="note" x="375" y="157">可选授权入口</text>
+  <rect class="box" x="525" y="102" width="190" height="70" style="fill:#edf6f8"/>
+  <text class="name" x="620" y="145">心电云端</text>
+  <rect class="box" x="770" y="102" width="195" height="70" style="fill:#f3f7fa"/>
+  <text class="name" x="867" y="145">树莓派终端</text>
+  <path class="life" d="M 130 172 V 1030 M 375 172 V 1030 M 620 172 V 1030 M 867 172 V 1030"/>
 
-  <rect class="box" x="549" y="224" width="12" height="78"/>
-  <path class="message" d="M 561 237 H 610 V 288 H 562"/>
-  <text class="label" x="530" y="258" style="text-anchor:end">采集并保存</text>
-  <text class="label" x="530" y="284" style="text-anchor:end">1 / 3 / 5 min</text>
+  <rect x="45" y="197" width="670" height="218" rx="8" fill="#f7f9fb" fill-opacity=".94" stroke="#a7b7c2"/>
+  <text class="note" x="68" y="226" style="text-anchor:start">入口二选一 · 1 / 3 / 5 分钟</text>
+  <text class="label" x="376" y="257">工作台直接提交请求</text>
+  <path class="message" d="M 130 272 H 618"/>
+  <path d="M 46 289 H 714" stroke="#c4cfd7" stroke-dasharray="4 4"/>
+  <text class="note" x="68" y="317" style="text-anchor:start">或：心伴已绑定，并已另行授予测量权限</text>
+  <text class="label" x="252" y="346">发起测量</text>
+  <path class="message" d="M 130 360 H 373"/>
+  <text class="label" x="497" y="386">经授权接口提交</text>
+  <path class="message" d="M 375 401 H 618"/>
 
-  <path class="message" d="M 555 340 H 321"/>
-  <text class="label" x="438" y="323">上传记录 · 完成校验</text>
+  <text class="label" x="744" y="449">轮询并领取请求</text>
+  <path class="message" d="M 867 464 H 622"/>
+  <text class="label" x="744" y="503">返回待执行请求</text>
+  <path class="message return" d="M 620 518 H 865"/>
 
-  <rect class="box" x="314" y="368" width="12" height="58"/>
-  <path class="message" d="M 326 378 H 370 V 416 H 327"/>
-  <text class="label" x="295" y="391" style="text-anchor:end">提交分析任务¹</text>
-  <text class="label" x="295" y="417" style="text-anchor:end">分类 / QRS-RR</text>
+  <rect x="861" y="550" width="12" height="96" fill="#e0ebf2" stroke="#6c8292"/>
+  <path class="message" d="M 873 565 H 948 V 626 H 875"/>
+  <text class="label" x="837" y="581" style="text-anchor:end">STM32 采集 → 终端接收</text>
+  <text class="label" x="837" y="616" style="text-anchor:end">显示波形 · 本地保存与总结</text>
 
-  <path class="message" d="M 85 466 H 319"/>
-  <text class="label" x="202" y="449">查询状态与结果</text>
-  <path class="message return" d="M 320 520 H 86"/>
-  <text class="label" x="202" y="503">返回记录与分析状态</text>
+  <text class="label" x="744" y="683">分块上传并完成校验</text>
+  <path class="message" d="M 867 698 H 622"/>
+  <text class="label" x="744" y="737">确认上传完成</text>
+  <path class="message return" d="M 620 752 H 865"/>
+
+  <rect x="614" y="792" width="12" height="80" fill="#e0ebf2" stroke="#6c8292"/>
+  <path class="message" d="M 626 807 H 691 V 852 H 628"/>
+  <text class="label" x="590" y="815" style="text-anchor:end">按用户操作 / 自动分析设置¹</text>
+  <text class="label" x="590" y="850" style="text-anchor:end">分类与 QRS/RR 分别排队</text>
+
+  <text class="label" x="375" y="916">工作台查询记录、状态与结果</text>
+  <path class="message" d="M 130 932 H 618"/>
+  <text class="label" x="375" y="972">返回当前状态及已有结果</text>
+  <path class="message return" d="M 620 988 H 132"/>
+
+  <rect x="35" y="1045" width="930" height="118" rx="10" fill="#f3f7fa"/>
+  <text class="note" x="60" y="1075" style="text-anchor:start">¹ 自动分析默认关闭；上传完成、分析完成分别判断。</text>
+  <text class="note" x="60" y="1109" style="text-anchor:start">心伴经授权接口查询本人摘要与状态；波形和分析详情回原工作台查看。</text>
+  <text class="note" x="60" y="1143" style="text-anchor:start">断网时保留已保存的本地记录，恢复连接后可补传。</text>
 </svg>
