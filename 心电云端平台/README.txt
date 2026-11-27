@@ -8,16 +8,18 @@
 
 ## 使用现有平台
 
-1. 从项目首页（https://github.com/XiongBoT/bme-ecg-system/blob/main/README.md#应用下载）选择网页、Windows 或 Android 下载；iPhone 使用网页，可添加到主屏幕。
-2. 使用自己的心电平台账号登录。新版登录页可“申请账号”，管理员通过后使用申请时的密码登录；旧服务没有申请入口或忘记密码时联系项目管理员。GitHub 账号与平台账号分别管理。
+1. 打开心电工作台（https://62.234.150.104/），或从项目首页（https://github.com/XiongBoT/bme-ecg-system/blob/main/README.md#应用下载）下载 Windows / Android 客户端；iPhone 使用网页，可添加到主屏幕。
+2. 使用自己的心电平台账号登录。新用户在登录页“申请账号”，管理员通过后使用申请时的密码登录；忘记密码时联系项目管理员。GitHub 账号与平台账号分别管理。
 3. 由管理员授权采集设备。在树莓派选择同一个使用者，或在手机“开始测量”选择就绪终端与 1／3／5 分钟；实际采集由终端执行，结束后保存上传。
 4. 回到工作台刷新，选择记录，核对来源、采集完整性和上传状态，再查看摘要、波形及分析。需要完整数据时导出 CSV。
 
-没有找到记录时，按排查顺序（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/故障排查.md#记录与报告排查）核对账号、上传和筛选；管理员分配账号、设备及历史记录见使用说明（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#管理员账号管理待部署）。
+没有找到记录时，按排查顺序（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/故障排查.md#记录与报告排查）核对账号、上传和筛选；管理员分配账号、设备及历史记录见使用说明（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#管理员账号管理）。
 
 账号申请、设备授权与后台地址集中见管理员指南（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/管理员指南.md）。当前源码的管理员入口为“我的 → 管理工具 → 进入管理后台”；进入“账号管理”，打开账号详情后选择“管理设备授权”，再按需查看记录信息。运行总览用于排查连接、队列及备份问题，具体步骤见统一管理后台（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#统一管理后台）。
 
 ### 先确认使用的是哪个版本
+
+服务器已于 2026-11-27 部署 `6ac70ff3`；公开 Android 1.1.0 仍来自 `87f23ba`，本次未升级终端或安装包。手机浏览器可打开心伴（https://62.234.150.104/heartlife/），使用独立心伴账号，按绑定流程（https://github.com/XiongBoT/bme-ecg-system/blob/main/heartlife/docs/心电集成.md#用户流程）关联本人心电账号；当前公开 APK 未内置该连接入口。
 
 先查看客户端显示的版本，再对照版本与交付状态（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/版本与交付状态.md）中的源码提交、公开安装包和最近部署记录。Android 内置页面随 APK 更新；旧 1.0.0 的“记录、结果、账号”界面需手动安装新版才能更新。浏览器和 Windows 打开的网页随服务器更新，Windows 启动器版本单独维护。账号申请、固定时长测量等功能还需要配套服务和终端，不能仅凭 APK 或本地源码版本判断线上可用性。
 
@@ -56,7 +58,7 @@ QRS/RR 与 HRV 的公开数据复跑步骤集中在研究工具（https://github
 
 首次加入云端维护，先按云端协作者上手（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/云端协作者上手.md）确认腾讯云身份、项目实例和 Linux 运行账号，完成只读状态检查。
 
-先看部署与升级（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/部署与升级.md）确认云端、终端、客户端的顺序及恢复边界；服务器、Windows、Android 的构建入口见部署导航（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/deploy/README.md）。合并代码或构建安装包不自动更新服务器或设备；实际部署与待验收项按交付状态（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/版本与交付状态.md）核对，操作和历史证据见阶段记录（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/云端工作台迭代.md）。
+服务器使用统一部署（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/统一部署.md）交付同一提交的心电云端、心伴后端和生产前端。再看部署与升级（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/部署与升级.md）确认终端、客户端的顺序及恢复边界；各类构建入口见部署导航（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/deploy/README.md）。合并代码或构建安装包不自动更新服务器或设备；实际部署与待验收项按交付状态（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/版本与交付状态.md）核对，历史证据见阶段记录（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/云端工作台迭代.md）。
 
 # 云端使用说明
 
@@ -64,7 +66,7 @@ QRS/RR 与 HRV 的公开数据复跑步骤集中在研究工具（https://github
 
 当前主分支已合入心电健康助手，操作见心电健康助手 1.1.0（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/心电健康助手.md）：登录页申请账号、管理员审核、记住登录、日／月／年趋势和 1／3／5 分钟测量。手机发起采集需配套更新云端与终端；Android 还需包含对应页面的 APK。浏览器无需安装 APK。
 
-本文按 2026-11-26 主分支 `91ad66e` 的功能和按钮名称说明操作，不表示这些功能均已上线。源码、公开安装包、最近有证据的服务器部署及实机验收分别查版本与交付状态（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/版本与交付状态.md）；较早页面的入口可能不同。
+本文按 2026-11-27 已部署的 `6ac70ff3` 网页功能和按钮名称说明操作。公开 APK 仍来自 `87f23ba`，较早页面的入口可能不同；真实账号和设备流程待验收。源码、安装包、服务器部署及实机验证分别查版本与交付状态（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/版本与交付状态.md）。
 
 | 要完成的事 | 章节 |
 | --- | --- |
@@ -74,6 +76,7 @@ QRS/RR 与 HRV 的公开数据复跑步骤集中在研究工具（https://github
 | 任务进度、自动分析、人工复核与运行概览 | 统一工作流程（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#统一工作流程） |
 | 记录片段备注、每日服务器备份 | 片段标注（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#片段标注）、每日自动备份（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#每日自动备份） |
 | 手机导航、刷新、报告 | 手机使用流程（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#手机使用流程） |
+| 心伴入口、本人摘要、授权测量和私密周报 | 心伴绑定流程（https://github.com/XiongBoT/bme-ecg-system/blob/main/heartlife/docs/心电集成.md#用户流程） |
 | 分清 CSV、报告与服务器备份 | 导出内容怎么选（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#导出内容怎么选） |
 | 看懂两种分析及缺失结果 | 分析与结果复核（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#分析与结果复核）、独立 QRS/RR（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#独立-qrsrr-分析） |
 | 管理账号和设备 | 设备和账号（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#设备和账号）、管理员账号管理（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/使用说明.md#管理员账号管理） |
@@ -171,7 +174,7 @@ CSV 保存后可主动打开文件；没有关联查看应用时，通过系统�
 
 结果显示 R 峰数、平均 RR、换算心率、RR 变异性、有效时长/点数及排除原因。单记录上限 100 万采样点；模拟、模式不明或质量不足的输入可能没有可用结果。没有可信正常窦性间期标记时，HRV 显示不可用，不能用模型 N 类代替 NN。
 
-Android 1.1.0 试用包已包含 QRS/RR 页面，实际分析仍需配套服务与依赖；其他版本按交付状态（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/版本与交付状态.md）核对。后台任务与结果版本、权限及升级回退边界见接口约定（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/接口约定.md#独立-qrsrr-分析2026-11-24待部署）。公开数据的离线评估与在线结果分别查阅算法与评估（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/算法与评估.md）。
+Android 1.1.0 试用包已包含 QRS/RR 页面，实际分析仍需配套服务与依赖；其他版本按交付状态（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/版本与交付状态.md）核对。后台任务与结果版本、权限及升级回退边界见接口约定（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/接口约定.md#独立-qrsrr-分析）。公开数据的离线评估与在线结果分别查阅算法与评估（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/算法与评估.md）。
 
 ## 设备和账号
 
@@ -357,7 +360,7 @@ python tools/restore_database.py /实际数据目录/backups/ecg-backup-任务�
 
 | 现象 | 检查与处理 |
 | --- | --- |
-| 找不到搜索、筛选或撤销登录 | 先核对是否为管理员，以及服务器是否已部署 PR #29；Android 还需更新内置页面的 APK。仓库已合并不等于当前页面已更新 |
+| 找不到搜索、筛选或撤销登录 | 核对管理员身份及实际页面版本，重新打开当前服务器网页；Android 内置页面随 APK 更新。当前服务器版本见交付状态，不以旧安装包或缓存判断线上功能 |
 | 创建时提示账号格式不正确或已存在 | 账号为 3–32 位字母、数字、横线、下划线，以字母或数字开头；首尾空白去除、大写转小写后仍须唯一。搜索现有账号再判断，勿反复提交 |
 | 初始密码不能提交 | 检查密码是否为 5–128 个字符，两次输入是否一致；不要把真实密码写入反馈或截图 |
 | 已提示创建成功，但列表未更新 | 点击“刷新”再搜索账号；刷新失败不代表创建失败，不要重复创建 |
@@ -368,11 +371,13 @@ python tools/restore_database.py /实际数据目录/backups/ecg-backup-任务�
 | 恢复账号后旧窗口仍提示登录失效 | 恢复不会复活已撤销的登录，使用当前密码重新登录 |
 | 列表加载失败或登录校验失效 | 先刷新或重新登录，再核对账号/目标和当前状态；确认操作结果前不要反复重置密码或分配记录 |
 
-## 片段标注与自动备份排查（本地增量）
+<a id="片段标注与自动备份排查本地增量"></a>
+
+## 片段标注与自动备份排查
 
 | 现象 | 检查与处理 |
 | --- | --- |
-| 看不到标注或每日备份 | 本轮尚未部署；核对服务端及网页版本，旧 APK 需要更新内置资源 |
+| 看不到标注或每日备份 | 当前服务器已部署相关服务与网页；核对实际站点和页面缓存，标注只针对本人完成记录，每日备份需要管理员身份。公开 APK 未包含这部分资源，可从浏览器进入 |
 | 标注无法保存 | 等待上传完成，核对所属账号、首尾时间、60秒范围和500字限制；采样缺口不会自动填补 |
 | 标注或计划提示已被修改 | 当前写入未保存，先刷新并核对其他页面的修改，再重新操作 |
 | 撤下的标注不见了 | 勾选“显示已撤下”，找到条目后恢复；记录回收时需先恢复记录 |
@@ -381,6 +386,8 @@ python tools/restore_database.py /实际数据目录/backups/ecg-backup-任务�
 | 恢复后不再定时备份 | 预期行为；确认新目录、环境及重新发放的凭据后，由管理员重新启用 |
 
 ## 验证工具的边界
+
+服务器升级遇到停机超时或 Nginx 重载期间状态变化时，先按协作者只读检查（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/docs/云端协作者上手.md#首次只读检查）核对进程、服务结果与部署记录，再按统一部署（https://github.com/XiongBoT/bme-ecg-system/blob/main/docs/统一部署.md）处理。单次 HTTP 状态或停止命令返回值不足以证明切换完成，不通过反复覆盖安装或恢复旧数据库消除报错。
 
 `verify_live_capture.py --offline` 只检查本地证据，不证明线上验收通过。`verify_live_model.py` 读取已有云端结果并在本地复算；`verify_cloud_model.py` 会请求云端分析。运行前查看工具分类（https://github.com/XiongBoT/bme-ecg-system/blob/main/心电云端平台/tools/README.md），不要把所有 `verify_` 脚本当作无副作用单元测试。
 
