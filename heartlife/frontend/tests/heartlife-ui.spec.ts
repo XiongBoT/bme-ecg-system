@@ -186,6 +186,11 @@ describe('HeartLife Centered Frontend Suite', () => {
   it('4. WeeklyReportView renders 截至今日, 无计划, 未记录 vs 0 分钟, and accessible SVG + numeric table (T-0610)', async () => {
     const router = makeTestRouter('/weekly-report')
     await router.isReady()
+    useAuthStore().user = {
+      id: 'weekly-reader', account: 'alice', nickname: '林晓禾', bio: '',
+      timezone: 'Asia/Shanghai', roles: ['member'], is_demo: true,
+      created_at: '2026-11-26T00:00:00Z',
+    }
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       jsonResponse({
@@ -223,6 +228,7 @@ describe('HeartLife Centered Frontend Suite', () => {
     const rowText = wrapper.find('tbody tr').text()
     expect(rowText).toContain('未记录')
     expect(rowText).toContain('0 分钟')
+    wrapper.unmount()
   })
 
   it('5. JournalView preserves null for blank input vs 0 for explicit zero input (T-0301)', async () => {

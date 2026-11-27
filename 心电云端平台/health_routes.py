@@ -104,6 +104,47 @@ def read_trends(db, owner_id, period, anchor, utc_offset_minutes):
                 note='按采集开始时间汇总已上传完成且未回收的串口记录；心率来自终端质量合格窗口，缺失不记为0。')
 
 
+def reconcile_measurements(db):
+    now = time.time()
+    # Upload completion is independent of analysis completion.
+    db.execute("UPDATE measurement_requests SET status='completed',message='测量记录已上传，可查看报告',updated_at=? "
+               "WHERE status IN ('recording','uploading') AND EXISTS(SELECT 1 FROM sessions s "
+               "WHERE s.id=measurement_requests.session_id AND s.owner_id=measurement_requests.owner_id "
+               "AND s.ingest_device_id=measurement_requests.device_id AND s.complete=1)", (now,))
+    db.execute("UPDATE measurement_requests SET status='expired',message='设备未及时接收，请确认终端后重新发起',updated_at=? "
+               "WHERE status='queued' AND expires_at<?", (now, now))
+    db.execute("UPDATE measurement_requests SET status='failed',message='终端长时间未回应，请到终端检查本地记录',updated_at=? "
+               "WHERE status IN ('accepted','recording','uploading') AND updated_at+duration_s+600<?", (now, now))
+
+
+def public_measurement(row):
+    return {k: row[k] for k in ('id','device_id','duration_s','status','created_at','expires_at','updated_at','session_id','message')}
+
+
+def create_measurement(db, devices, owner_id, payload):
+    """Caller holds BEGIN IMMEDIATE and validates its own session/grant identity."""
+    devices.require_recipient(payload.device_id, owner_id, db)
+    reconcile_measurements(db)
+    previous = db.execute('SELECT * FROM measurement_requests WHERE owner_id=? AND request_key=?',
+                          (owner_id, payload.request_key)).fetchone()
+    if previous:
+        if previous['device_id'] != payload.device_id or previous['duration_s'] != payload.duration_s:
+            raise HTTPException(409, '重试参数与原测量不一致')
+        return previous
+    beat = db.execute('SELECT seen,payload FROM device_heartbeats WHERE device_id=?', (payload.device_id,)).fetchone()
+    info = json.loads(beat['payload']) if beat else {}
+    if not beat or time.time()-beat['seen'] > 35:
+        raise HTTPException(409, '设备离线，请先启动采集终端')
+    if info.get('state') != 'standby' or not info.get('remote_ready'):
+        raise HTTPException(409, '终端未就绪：请更新终端、选择串口并等待当前操作结束')
+    if db.execute("SELECT 1 FROM measurement_requests WHERE device_id=? AND status IN ('queued','accepted','recording','uploading')", (payload.device_id,)).fetchone():
+        raise HTTPException(409, '该设备已有测量任务，请等待完成')
+    now, mid = time.time(), uuid.uuid4().hex
+    db.execute('INSERT INTO measurement_requests VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+               (mid,owner_id,payload.device_id,payload.request_key,payload.duration_s,'queued',now,now+45,now,None,'等待终端开始采集'))
+    return db.execute('SELECT * FROM measurement_requests WHERE id=?', (mid,)).fetchone()
+
+
 def add_routes(app, connect, identity, devices, require_device, auth_enabled):
     initialize(connect)
 
@@ -115,20 +156,8 @@ def add_routes(app, connect, identity, devices, require_device, auth_enabled):
             raise HTTPException(401, '账号已停用')
         return who
 
-    def reconcile(db):
-        now = time.time()
-        # Only a manifest-validated, matching owner's record can produce a report link.
-        db.execute("UPDATE measurement_requests SET status='completed',message='测量记录已上传，可查看报告',updated_at=? "
-                   "WHERE status IN ('recording','uploading') AND EXISTS(SELECT 1 FROM sessions s "
-                   "WHERE s.id=measurement_requests.session_id AND s.owner_id=measurement_requests.owner_id "
-                   "AND s.ingest_device_id=measurement_requests.device_id AND s.complete=1)", (now,))
-        db.execute("UPDATE measurement_requests SET status='expired',message='设备未及时接收，请确认终端后重新发起',updated_at=? "
-                   "WHERE status='queued' AND expires_at<?", (now, now))
-        db.execute("UPDATE measurement_requests SET status='failed',message='终端长时间未回应，请到终端检查本地记录',updated_at=? "
-                   "WHERE status IN ('accepted','recording','uploading') AND updated_at+duration_s+600<?", (now, now))
-
-    def public(row):
-        return {k: row[k] for k in ('id','device_id','duration_s','status','created_at','expires_at','updated_at','session_id','message')}
+    reconcile = reconcile_measurements
+    public = public_measurement
 
     @app.get('/api/records/trends')
     def trends(period: Literal['day','month','year'], anchor: str = Query(pattern=r'^\d{4}-\d{2}-\d{2}$'),
@@ -143,26 +172,7 @@ def add_routes(app, connect, identity, devices, require_device, auth_enabled):
         with closing(connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
             who = user(db)
-            devices.require_recipient(payload.device_id, who['id'], db)
-            reconcile(db)
-            previous = db.execute('SELECT * FROM measurement_requests WHERE owner_id=? AND request_key=?',
-                                  (who['id'],payload.request_key)).fetchone()
-            if previous:
-                if previous['device_id'] != payload.device_id or previous['duration_s'] != payload.duration_s:
-                    raise HTTPException(409, '重试参数与原测量不一致')
-                return public(previous)
-            beat = db.execute('SELECT seen,payload FROM device_heartbeats WHERE device_id=?', (payload.device_id,)).fetchone()
-            info = json.loads(beat['payload']) if beat else {}
-            if not beat or time.time()-beat['seen'] > 35:
-                raise HTTPException(409, '设备离线，请先启动采集终端')
-            if info.get('state') != 'standby' or not info.get('remote_ready'):
-                raise HTTPException(409, '终端未就绪：请更新终端、选择串口并等待当前操作结束')
-            if db.execute("SELECT 1 FROM measurement_requests WHERE device_id=? AND status IN ('queued','accepted','recording','uploading')", (payload.device_id,)).fetchone():
-                raise HTTPException(409, '该设备已有测量任务，请等待完成')
-            now = time.time(); mid = uuid.uuid4().hex
-            db.execute('INSERT INTO measurement_requests VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                       (mid,who['id'],payload.device_id,payload.request_key,payload.duration_s,'queued',now,now+45,now,None,'等待终端开始采集'))
-            return public(db.execute('SELECT * FROM measurement_requests WHERE id=?',(mid,)).fetchone())
+            return public(create_measurement(db, devices, who['id'], payload))
 
     @app.get('/api/measurements')
     def list_measurements():

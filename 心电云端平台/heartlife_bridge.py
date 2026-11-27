@@ -1,10 +1,11 @@
-"""Opt-in HeartLife integration: separate, owner-bound, summary-only grants.
+"""Opt-in HeartLife integration: owner-bound summaries and explicit acquisition consent.
 
 The service secret identifies the one configured HeartLife deployment. It is
 never a general ECG credential. Grants and pairing codes are stored as hashes;
 all data reads additionally require a grant and its immutable HeartLife subject.
 """
 from contextlib import closing
+from datetime import date, datetime, timedelta, timezone as utc_timezone
 import hashlib
 import hmac
 import json
@@ -14,11 +15,13 @@ import secrets
 import time
 from typing import Literal
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
-from health_routes import read_trends
+from health_routes import (MeasurementRequest, TREND_QUERY, create_measurement,
+                           public_measurement, read_trends, reconcile_measurements)
 
 
 CODE_TTL = 300
@@ -31,6 +34,10 @@ TOKEN = re.compile(r'^[A-Za-z0-9_-]{32,128}$')
 MACHINE_ROUTES = frozenset({
     ('POST', '/api/heartlife/exchange'),
     ('GET', '/api/heartlife/summary'),
+    ('GET', '/api/heartlife/devices'),
+    ('GET', '/api/heartlife/measurements'),
+    ('POST', '/api/heartlife/measurements'),
+    ('GET', '/api/heartlife/weekly-summary'),
     ('DELETE', '/api/heartlife/grant'),
     ('DELETE', '/api/heartlife/subject-grant'),
 })
@@ -71,6 +78,93 @@ class ExchangeInput(BaseModel):
     operation_id: str = Field(min_length=32, max_length=32, pattern=r'^[a-f0-9]{32}$')
 
 
+class CodeInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    measurement_allowed: StrictBool = False
+
+
+def envelope(grant, **data):
+    return dict(ecg_user=dict(id=grant['owner_id'], username=grant['username']),
+                expires_at=grant['expires_at'], measurement_allowed=bool(grant['measurement_allowed']), **data)
+
+
+def weekly_summary(db, owner_id, week_start, timezone, observed_days):
+    """One indexed owner scan; local midnight boundaries also cover DST weeks."""
+    try:
+        first = date.fromisoformat(week_start)
+        if first.weekday() != 0:
+            raise ValueError('not Monday')
+        dates = [first + timedelta(days=i) for i in range(8)]
+        tz = ZoneInfo(timezone)
+        start, end = [datetime.combine(day, datetime.min.time(), tzinfo=tz).astimezone(utc_timezone.utc)
+                      for day in (first, dates[observed_days])]
+    except (ValueError, OverflowError, ZoneInfoNotFoundError):
+        raise HTTPException(422, '心电统计日期或时区无效')
+    buckets = [dict(date=day.isoformat(), records=0, duration_s=0., hr_mean=None,
+                    hr_records=0, _weight=0., _sum=0.) for day in dates[:7]]
+    for row in db.execute(TREND_QUERY, (owner_id, start.isoformat(), end.isoformat())):
+        meta = json.loads(row['metadata'])
+        local_date = datetime.fromisoformat(meta['started_utc'].replace('Z', '+00:00')).astimezone(tz).date()
+        bucket = buckets[(local_date - first).days]
+        bucket['records'] += 1
+        bucket['duration_s'] += row['sample_count'] / 360
+        details = json.loads(row['details']) if row['details'] else {}
+        hr = (details.get('analysis_stats') or {}).get('hr')
+        if hr:
+            bucket['_weight'] += hr['window_samples']
+            bucket['_sum'] += hr['mean'] * hr['window_samples']
+            bucket['hr_records'] += 1
+    weight = sum(row['_weight'] for row in buckets)
+    total_duration_s = round(sum(row['duration_s'] for row in buckets), 1)
+    hr_mean = round(sum(row['_sum'] for row in buckets) / weight, 1) if weight else None
+    for bucket in buckets:
+        weighted_sum, bucket_weight = bucket.pop('_sum'), bucket.pop('_weight')
+        bucket['hr_mean'] = round(weighted_sum / bucket_weight, 1) if bucket_weight else None
+        bucket['duration_s'] = round(bucket['duration_s'], 1)
+    return dict(week_start=week_start, week_end=dates[6].isoformat(), timezone=timezone,
+                observed_days=observed_days, total_records=sum(row['records'] for row in buckets),
+                total_duration_s=total_duration_s, hr_mean=hr_mean,
+                hr_records=sum(row['hr_records'] for row in buckets), daily_series=buckets)
+
+
+MEASUREMENT_MESSAGES = {
+    'queued': '等待终端开始采集', 'accepted': '终端正在准备采集',
+    'recording': '正在采集，请保持设备连接', 'uploading': '采集已结束，正在上传记录',
+    'completed': '记录已上传，分析状态见下方',
+    'expired': '设备未及时接收，请确认终端后重新发起',
+    'failed': '测量未完成，请到终端检查设备与本地记录',
+}
+
+
+def bridge_measurement(db, workflow, owner_id, row):
+    item = public_measurement(row)
+    item['message'] = MEASUREMENT_MESSAGES.get(row['status'], '请到原心电工作台查看测量状态')
+    item['report'] = {'model': 'not_started', 'physiology': 'not_started'}
+    # A device-provided session id is not evidence that a usable report exists.
+    session = db.execute('''SELECT s.* FROM sessions s LEFT JOIN session_details d ON d.session_id=s.id
+        WHERE s.id=? AND s.owner_id=? AND s.ingest_device_id=? AND s.complete=1 AND d.trashed_at IS NULL''',
+                         (row['session_id'], owner_id, row['device_id'])).fetchone()
+    if session is None:
+        item['session_id'] = None
+        return item
+    manifest = json.dumps([dict(chunk) for chunk in db.execute(
+        'SELECT chunk_id,sha256,sample_count FROM chunks WHERE session_id=? ORDER BY chunk_id', (session['id'],))])
+    for kind in item['report']:
+        job = db.execute('''SELECT source_digest,status FROM analysis_jobs WHERE session_id=? AND kind=?
+            ORDER BY created DESC,job_id DESC LIMIT 1''', (session['id'], kind)).fetchone()
+        state = workflow.task_status(session['id'], kind, job['source_digest'], job['status'],
+                                     session['metadata'], session['complete'], manifest) if job else 'not_started'
+        intent = db.execute('SELECT status FROM workflow_intents WHERE session_id=? AND kind=?',
+                            (session['id'], kind)).fetchone()
+        if intent and intent['status'] == 'pending' and state not in ('queued', 'running'):
+            state = 'queued'
+        elif intent and intent['status'] == 'blocked' and not job:
+            state = 'failed'
+        item['report'][kind] = {'complete': 'completed', 'not_configured': 'failed', 'stale': 'not_started'}.get(
+            state, state if state in ('queued', 'running', 'failed', 'ineligible') else 'not_started')
+    return item
+
+
 class HeartLifeBridge:
     def __init__(self, connect, auth_enabled):
         self.connect = connect
@@ -82,17 +176,22 @@ class HeartLifeBridge:
             db.executescript('''
             CREATE TABLE IF NOT EXISTS heartlife_codes(
                 code_hash TEXT PRIMARY KEY, owner_id TEXT NOT NULL UNIQUE REFERENCES users(id),
-                created_at REAL NOT NULL, expires_at REAL NOT NULL);
+                created_at REAL NOT NULL, expires_at REAL NOT NULL,
+                measurement_allowed INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS heartlife_grants(
                 token_hash TEXT PRIMARY KEY, owner_id TEXT NOT NULL UNIQUE REFERENCES users(id),
                 subject_id TEXT NOT NULL UNIQUE, audience TEXT NOT NULL, scope TEXT NOT NULL,
-                created_at REAL NOT NULL, expires_at REAL NOT NULL, operation_id TEXT NOT NULL);
+                created_at REAL NOT NULL, expires_at REAL NOT NULL, operation_id TEXT NOT NULL,
+                measurement_allowed INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS heartlife_exchange_attempts(
                 bucket TEXT PRIMARY KEY, started_at REAL NOT NULL, attempts INTEGER NOT NULL);
             ''')
             if 'operation_id' not in {row['name'] for row in db.execute('PRAGMA table_info(heartlife_grants)')}:
                 db.execute("ALTER TABLE heartlife_grants ADD COLUMN operation_id TEXT NOT NULL DEFAULT ''")
-                db.commit()
+            for table in ('heartlife_codes', 'heartlife_grants'):
+                if 'measurement_allowed' not in {row['name'] for row in db.execute(f'PRAGMA table_info({table})')}:
+                    db.execute(f'ALTER TABLE {table} ADD COLUMN measurement_allowed INTEGER NOT NULL DEFAULT 0')
+            db.commit()
 
     @property
     def public_url(self):
@@ -122,7 +221,7 @@ class HeartLifeBridge:
             raise HTTPException(401, '心伴授权已失效，请重新绑定')
         return authorization[7:]
 
-    def require_grant(self, request, db):
+    def require_grant(self, request, db, *, measurement=False):
         self.require_client(request)
         subject = self.subject(request)
         raw = self.token(request)
@@ -132,6 +231,8 @@ class HeartLifeBridge:
                          (digest(raw), subject, AUDIENCE, SCOPE, time.time())).fetchone()
         if row is None:
             raise HTTPException(401, '心伴授权已失效，请重新绑定')
+        if measurement and not row['measurement_allowed']:
+            raise HTTPException(403, '当前关联仅可查看摘要，请在心电平台重新授权测量')
         return row
 
     def exchange_limit(self, request):
@@ -148,7 +249,7 @@ class HeartLifeBridge:
                 ON CONFLICT(bucket) DO UPDATE SET attempts=attempts+1''', (bucket, now))
 
 
-def add_routes(app, connect, identity, auth_enabled):
+def add_routes(app, connect, identity, auth_enabled, devices, workflow):
     bridge = HeartLifeBridge(connect, auth_enabled)
 
     def user(db):
@@ -166,13 +267,14 @@ def add_routes(app, connect, identity, auth_enabled):
     def link_status():
         with closing(connect()) as db:
             who = user(db)
-            row = db.execute('SELECT subject_id,expires_at FROM heartlife_grants WHERE owner_id=? AND expires_at>?',
+            row = db.execute('SELECT subject_id,expires_at,measurement_allowed FROM heartlife_grants WHERE owner_id=? AND expires_at>?',
                              (who['id'], time.time())).fetchone()
             return dict(enabled=bridge.enabled, heartlife_url=bridge.public_url, linked=bool(row),
-                        subject_id=row['subject_id'] if row else None, expires_at=row['expires_at'] if row else None)
+                        subject_id=row['subject_id'] if row else None, expires_at=row['expires_at'] if row else None,
+                        measurement_allowed=bool(row and row['measurement_allowed']))
 
     @app.post('/api/heartlife/link-code')
-    def make_code():
+    def make_code(payload: CodeInput | None = None):
         bridge.require_enabled()
         now = time.time()
         raw = secrets.token_urlsafe(24)
@@ -183,8 +285,10 @@ def add_routes(app, connect, identity, auth_enabled):
             if db.execute('SELECT 1 FROM heartlife_grants WHERE owner_id=?', (who['id'],)).fetchone():
                 raise HTTPException(409, '已关联心伴账号，请先解除旧关联')
             db.execute('DELETE FROM heartlife_codes WHERE owner_id=? OR expires_at<=?', (who['id'], now))
-            db.execute('INSERT INTO heartlife_codes VALUES(?,?,?,?)', (digest(raw), who['id'], now, now+CODE_TTL))
-        return dict(code=raw, expires_at=now+CODE_TTL, heartlife_url=bridge.public_url)
+            allowed = bool(payload and payload.measurement_allowed)
+            db.execute('INSERT INTO heartlife_codes(code_hash,owner_id,created_at,expires_at,measurement_allowed) VALUES(?,?,?,?,?)',
+                       (digest(raw), who['id'], now, now+CODE_TTL, int(allowed)))
+        return dict(code=raw, expires_at=now+CODE_TTL, heartlife_url=bridge.public_url, measurement_allowed=allowed)
 
     @app.delete('/api/heartlife/link')
     def unlink():
@@ -201,7 +305,7 @@ def add_routes(app, connect, identity, auth_enabled):
         with closing(connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
             now = time.time()
-            row = db.execute('''SELECT c.owner_id,u.username FROM heartlife_codes c
+            row = db.execute('''SELECT c.owner_id,c.measurement_allowed,u.username FROM heartlife_codes c
                 JOIN users u ON u.id=c.owner_id WHERE code_hash=? AND expires_at>? AND u.active=1''',
                              (digest(payload.code), now)).fetchone()
             if row is None:
@@ -210,11 +314,13 @@ def add_routes(app, connect, identity, auth_enabled):
             if db.execute('SELECT 1 FROM heartlife_grants WHERE owner_id=? OR subject_id=?',
                           (row['owner_id'], payload.subject_id)).fetchone():
                 raise HTTPException(409, '账号已有心伴关联，请先解除旧关联')
-            db.execute('INSERT INTO heartlife_grants VALUES(?,?,?,?,?,?,?,?)',
+            db.execute('''INSERT INTO heartlife_grants(token_hash,owner_id,subject_id,audience,scope,created_at,
+                expires_at,operation_id,measurement_allowed) VALUES(?,?,?,?,?,?,?,?,?)''',
                        (digest(raw), row['owner_id'], payload.subject_id, AUDIENCE, SCOPE, now, now+GRANT_TTL,
-                        payload.operation_id))
+                        payload.operation_id, row['measurement_allowed']))
             db.execute('DELETE FROM heartlife_codes WHERE code_hash=?', (digest(payload.code),))
-        return dict(grant_token=raw, ecg_user_id=row['owner_id'], ecg_username=row['username'], expires_at=now+GRANT_TTL)
+        return dict(grant_token=raw, ecg_user_id=row['owner_id'], ecg_username=row['username'], expires_at=now+GRANT_TTL,
+                    measurement_allowed=bool(row['measurement_allowed']))
 
     @app.get('/api/heartlife/summary')
     def summary(request: Request, period: Literal['day', 'month', 'year'],
@@ -239,8 +345,56 @@ def add_routes(app, connect, identity, auth_enabled):
                 hr = (details.get('analysis_stats') or {}).get('hr')
                 recent.append(dict(session_id=row['id'], started_utc=meta['started_utc'],
                                    duration_s=round(row['sample_count']/360, 1), hr_mean=hr['mean'] if hr else None))
-            return dict(ecg_user=dict(id=grant['owner_id'], username=grant['username']),
-                        expires_at=grant['expires_at'], recent_records=recent, trends=trends)
+            return envelope(grant, recent_records=recent, trends=trends)
+
+    @app.get('/api/heartlife/devices')
+    def available_devices(request: Request):
+        with closing(connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            grant = bridge.require_grant(request, db, measurement=True)
+            reconcile_measurements(db)
+            rows = db.execute('''SELECT d.*,h.seen,h.payload FROM devices d
+                LEFT JOIN device_heartbeats h ON h.device_id=d.id WHERE d.active=1
+                AND (d.legacy_shared=1 OR EXISTS(SELECT 1 FROM device_users u WHERE u.device_id=d.id AND u.user_id=?))
+                ORDER BY d.name,d.id''', (grant['owner_id'],)).fetchall()
+            busy = {r[0] for r in db.execute("SELECT device_id FROM measurement_requests WHERE status IN ('queued','accepted','recording','uploading')")}
+            result, now = [], time.time()
+            for row in rows:
+                devices.require_recipient(row['id'], grant['owner_id'], db)
+                info = json.loads(row['payload']) if row['payload'] else {}
+                online = row['seen'] is not None and now-row['seen'] <= 35
+                ready = online and info.get('state') == 'standby' and bool(info.get('remote_ready')) and row['id'] not in busy
+                reason = ('可以发起测量' if ready else '设备离线，请先启动采集终端' if not online else
+                          '该设备已有测量任务，请等待完成' if row['id'] in busy else '终端未就绪，请在设备上检查连接与当前操作')
+                result.append(dict(device_id=row['id'], label=row['name'], online=online, ready=ready, reason=reason))
+            return envelope(grant, devices=result)
+
+    @app.post('/api/heartlife/measurements', status_code=202)
+    def request_measurement(payload: MeasurementRequest, request: Request):
+        with closing(connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            grant = bridge.require_grant(request, db, measurement=True)
+            row = create_measurement(db, devices, grant['owner_id'], payload)
+            return envelope(grant, measurement=bridge_measurement(db, workflow, grant['owner_id'], row))
+
+    @app.get('/api/heartlife/measurements')
+    def list_measurements(request: Request):
+        with closing(connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            grant = bridge.require_grant(request, db, measurement=True)
+            reconcile_measurements(db)
+            rows = db.execute('SELECT * FROM measurement_requests WHERE owner_id=? ORDER BY created_at DESC,id DESC LIMIT 10',
+                              (grant['owner_id'],)).fetchall()
+            return envelope(grant, measurements=[bridge_measurement(db, workflow, grant['owner_id'], row) for row in rows])
+
+    @app.get('/api/heartlife/weekly-summary')
+    def read_weekly_summary(request: Request, week_start: str = Query(pattern=r'^\d{4}-\d{2}-\d{2}$'),
+                            timezone: str = Query(min_length=1, max_length=64),
+                            observed_days: int = Query(ge=1, le=7)):
+        with closing(connect()) as db:
+            db.execute('BEGIN')
+            grant = bridge.require_grant(request, db)
+            return envelope(grant, **weekly_summary(db, grant['owner_id'], week_start, timezone, observed_days))
 
     @app.delete('/api/heartlife/grant')
     def revoke_grant(request: Request):

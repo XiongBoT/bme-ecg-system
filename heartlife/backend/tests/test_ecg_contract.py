@@ -34,6 +34,7 @@ class CloudTransport:
         self.client = client
         self.available = True
         self.lose_next_exchange = False
+        self.lose_next_measurement = False
         self.before_send = None
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -51,6 +52,11 @@ class CloudTransport:
             self.lose_next_exchange = False
             assert response.status_code == 200, response.text
             raise httpx.ReadTimeout("synthetic lost exchange response", request=request)
+        if (self.lose_next_measurement and request.method == "POST"
+                and request.url.path == "/api/heartlife/measurements"):
+            self.lose_next_measurement = False
+            assert response.status_code == 202, response.text
+            raise httpx.ReadTimeout("synthetic lost measurement response", request=request)
         return httpx.Response(response.status_code, content=response.content,
                               headers={"Content-Type": "application/json"})
 
@@ -66,13 +72,14 @@ class Contract:
         self.clock = clock
         self.db_file = db_file
 
-    def code(self) -> str:
-        response = self.owner.post("/api/heartlife/link-code")
+    def code(self, measurement_allowed=None) -> str:
+        kwargs = {} if measurement_allowed is None else {"json": {"measurement_allowed": measurement_allowed}}
+        response = self.owner.post("/api/heartlife/link-code", **kwargs)
         assert response.status_code == 200, response.text
         return response.json()["code"]
 
-    def bind(self):
-        response = self.heartlife.post("/api/v1/me/ecg/link", json={"code": self.code()})
+    def bind(self, measurement_allowed=None):
+        response = self.heartlife.post("/api/v1/me/ecg/link", json={"code": self.code(measurement_allowed)})
         assert response.status_code == 200, response.text
         assert response.json()["linked"] is True
         return response
@@ -81,6 +88,27 @@ class Contract:
         return (client or self.heartlife).get("/api/v1/me/ecg/summary", params={
             "period": period, "anchor": anchor,
         })
+
+    def device_credentials(self, device_id="pi-contract", owner_id=None):
+        owner_id = owner_id or self.owner.get("/api/auth/me").json()["user"]["id"]
+        return self.cloud.app.state.devices.create(device_id, device_id, [owner_id])["credentials"]
+
+    def record(self, session_id, stamp, *, owner_id=None, source="serial", complete=1,
+               heart_rate=None, weight=360, device_id="pi-contract"):
+        owner_id = owner_id or self.owner.get("/api/auth/me").json()["user"]["id"]
+        with closing(sqlite3.connect(self.db_file)) as db, db:
+            db.execute(
+                "INSERT INTO sessions(id,metadata,created_at,sample_count,complete,owner_id,ingest_device_id) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (session_id, json.dumps({"source": source, "started_utc": stamp}),
+                 stamp, 21600, complete, owner_id, device_id),
+            )
+            if heart_rate is not None:
+                db.execute("INSERT INTO measurement_summaries VALUES(?,?)", (
+                    session_id, json.dumps({"analysis_stats": {"hr": {
+                        "mean": heart_rate, "window_samples": weight,
+                    }}}),
+                ))
 
     def seed_records(self):
         """All data are synthetic. Include non-visible records as leak sentinels."""
@@ -286,3 +314,201 @@ def test_late_unlink_cannot_revoke_replacement_binding(contract):
     assert contract.owner.get("/api/heartlife/link").json()["linked"] is True
     assert contract.heartlife.get("/api/v1/me/ecg/link").json()["linked"] is True
     assert contract.summary().status_code == 200
+
+
+def test_readonly_binding_cannot_request_measurement_permission(contract):
+    """The user consents on ECG; neither the HeartLife form nor requests can elevate it."""
+    code = contract.code()
+    forged = contract.heartlife.post("/api/v1/me/ecg/link", json={
+        "code": code, "measurement_allowed": True,
+    })
+    assert forged.status_code == 422
+    bound = contract.heartlife.post("/api/v1/me/ecg/link", json={"code": code})
+    assert bound.status_code == 200, bound.text
+    assert bound.json()["measurement_allowed"] is False
+    assert contract.owner.get("/api/heartlife/link").json()["measurement_allowed"] is False
+    for path in ("devices", "measurements"):
+        assert contract.heartlife.get("/api/v1/me/ecg/" + path).status_code == 403
+    result = contract.heartlife.post("/api/v1/me/ecg/measurements", json={
+        "device_id": "pi-contract", "duration_s": 60, "request_key": "a" * 32,
+    })
+    assert result.status_code == 403
+    with closing(sqlite3.connect(contract.db_file)) as db:
+        assert db.execute("SELECT COUNT(*) FROM measurement_requests").fetchone()[0] == 0
+    # The added private summary does not require remote-control permission.
+    assert contract.heartlife.get("/api/v1/me/ecg/weekly-summary").status_code == 200
+    assert contract.heartlife.delete("/api/v1/me/ecg/link").status_code == 200
+    upgraded = contract.bind(measurement_allowed=True)
+    assert upgraded.json()["measurement_allowed"] is True
+    assert contract.heartlife.get("/api/v1/me/ecg/devices").status_code == 200
+
+
+def test_measurement_lost_response_retry_upload_and_revocation(contract):
+    credentials = contract.device_credentials()
+    bound = contract.bind(measurement_allowed=True)
+    assert bound.json()["measurement_allowed"] is True
+    with closing(TestClient(contract.cloud.app)) as device:
+        device.headers["X-API-Key"] = credentials["token"]
+        heartbeat = device.put("/api/device/heartbeat", json={"state": "standby", "remote_ready": True})
+        assert heartbeat.status_code == 200, heartbeat.text
+        listed = contract.heartlife.get("/api/v1/me/ecg/devices")
+        assert listed.status_code == 200, listed.text
+        own = next(item for item in listed.json()["devices"] if item["device_id"] == "pi-contract")
+        assert own["online"] is True and own["ready"] is True
+        request = {"device_id": "pi-contract", "duration_s": 180, "request_key": "a" * 32}
+        contract.transport.lose_next_measurement = True
+        lost = contract.heartlife.post("/api/v1/me/ecg/measurements", json=request)
+        assert lost.status_code == 503, lost.text
+        assert lost.json()["error"]["code"] == "ECG_UNAVAILABLE"
+        retry = contract.heartlife.post("/api/v1/me/ecg/measurements", json=request)
+        assert retry.status_code == 202, retry.text
+        task = retry.json()["measurement"]
+        assert task["status"] == "queued"
+        assert task["report"] == {"model": "not_started", "physiology": "not_started"}
+        repeated = contract.heartlife.post("/api/v1/me/ecg/measurements", json=request)
+        assert repeated.json()["measurement"]["id"] == task["id"]
+        conflict = contract.heartlife.post("/api/v1/me/ecg/measurements", json={**request, "duration_s": 60})
+        assert conflict.status_code == 409
+        with closing(sqlite3.connect(contract.db_file)) as db:
+            assert db.execute("SELECT COUNT(*) FROM measurement_requests").fetchone()[0] == 1
+        assert contract.other.get("/api/measurements").json()["measurements"] == []
+        assert contract.outsider.get("/api/v1/me/ecg/measurements").status_code == 409
+        pending = device.get("/api/device/measurements/next").json()["measurement"]
+        assert pending["id"] == task["id"]
+        base = "/api/device/measurements/" + task["id"]
+        assert device.post(base + "/claim").status_code == 200
+        recording = device.post(base + "/status", json={
+            "status": "recording", "session_id": "contract_uploaded",
+        })
+        assert recording.status_code == 200, recording.text
+        contract.record("contract_uploaded", "2026-11-25T01:00:00Z")
+        response = contract.heartlife.get("/api/v1/me/ecg/measurements")
+        assert response.status_code == 200, response.text
+        item = response.json()["measurements"][0]
+        assert item["status"] == "completed"
+        assert item["report"] == {"model": "not_started", "physiology": "not_started"}
+        assert item["report_url"] == "https://ecg.example.test/?record=contract_uploaded"
+        assert "owner_id" not in response.text and "grant_token" not in response.text
+        assert credentials["token"] not in response.text and SECRET not in response.text
+        with closing(sqlite3.connect(contract.db_file)) as db:
+            assert db.execute("SELECT COUNT(*) FROM analysis_jobs").fetchone()[0] == 0
+        # Existing acquisition and its record remain; revocation only prevents future bridge access.
+        assert contract.owner.delete("/api/heartlife/link").status_code == 200
+        blocked = contract.heartlife.post("/api/v1/me/ecg/measurements", json={
+            **request, "request_key": "b" * 32,
+        })
+        assert blocked.status_code == 409, blocked.text
+        assert blocked.json()["error"]["code"] == "ECG_LINK_EXPIRED"
+        assert contract.owner.get("/api/measurements").json()["measurements"][0]["id"] == task["id"]
+
+
+def test_admin_binding_still_limits_devices_and_rechecks_recipient_at_write(contract):
+    owner_id = contract.owner.get("/api/auth/me").json()["user"]["id"]
+    other_id = contract.other.get("/api/auth/me").json()["user"]["id"]
+    credentials = contract.device_credentials()
+    contract.device_credentials("pi-other-private", owner_id=other_id)
+    with closing(sqlite3.connect(contract.db_file)) as db, db:
+        db.execute("UPDATE users SET is_admin=1 WHERE id=?", (owner_id,))
+    contract.bind(measurement_allowed=True)
+    with closing(TestClient(contract.cloud.app)) as device:
+        device.headers["X-API-Key"] = credentials["token"]
+        device.put("/api/device/heartbeat", json={"state": "standby", "remote_ready": True})
+        response = contract.heartlife.get("/api/v1/me/ecg/devices")
+        assert response.status_code == 200, response.text
+        rows = response.json()["devices"]
+        assert "pi-contract" in {item["device_id"] for item in rows}
+        assert "pi-other-private" not in response.text
+        assert all(set(item) == {"device_id", "label", "online", "ready", "reason"} for item in rows)
+
+        def revoke_device_before_write(request):
+            if request.method == "POST" and request.url.path == "/api/heartlife/measurements":
+                contract.cloud.app.state.devices.update("pi-contract", user_ids=[])
+
+        contract.transport.before_send = revoke_device_before_write
+        blocked = contract.heartlife.post("/api/v1/me/ecg/measurements", json={
+            "device_id": "pi-contract", "duration_s": 60, "request_key": "a" * 32,
+        })
+        assert blocked.status_code == 403, blocked.text
+        with closing(sqlite3.connect(contract.db_file)) as db:
+            assert db.execute("SELECT COUNT(*) FROM measurement_requests").fetchone()[0] == 0
+        assert contract.heartlife.get("/api/v1/me").status_code == 200
+
+
+def test_grant_revoked_after_heartlife_check_cannot_start_acquisition(contract):
+    credentials = contract.device_credentials()
+    contract.bind(measurement_allowed=True)
+    with closing(TestClient(contract.cloud.app)) as device:
+        device.headers["X-API-Key"] = credentials["token"]
+        device.put("/api/device/heartbeat", json={"state": "standby", "remote_ready": True})
+
+        def revoke_before_forward(request):
+            if request.method == "POST" and request.url.path == "/api/heartlife/measurements":
+                assert contract.owner.delete("/api/heartlife/link").status_code == 200
+
+        contract.transport.before_send = revoke_before_forward
+        response = contract.heartlife.post("/api/v1/me/ecg/measurements", json={
+            "device_id": "pi-contract", "duration_s": 60, "request_key": "a" * 32,
+        })
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "ECG_LINK_EXPIRED"
+        with closing(sqlite3.connect(contract.db_file)) as db:
+            assert db.execute("SELECT COUNT(*) FROM measurement_requests").fetchone()[0] == 0
+        assert device.get("/api/device/measurements/next").json()["measurement"] is None
+
+
+def test_weekly_summary_is_private_weighted_and_independent_of_life_report(contract):
+    contract.seed_records()
+    contract.record("weighted_monday", "2026-11-23T01:00:00Z", heart_rate=90, weight=720)
+    contract.record("after_observed_days", "2026-11-26T01:00:00Z", heart_rate=200)
+    contract.bind()
+    contract.clock.set(datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc))
+    before = contract.heartlife.get("/api/v1/me/weekly-report").json()
+    response = contract.heartlife.get("/api/v1/me/ecg/weekly-summary")
+    assert response.status_code == 200, response.text
+    assert response.headers["Cache-Control"] == "no-store"
+    data = response.json()
+    assert data["week_start"] == "2026-11-23" and data["week_end"] == "2026-11-29"
+    assert data["timezone"] == "Asia/Shanghai" and data["observed_days"] == 3
+    assert data["total_records"] == 3 and data["total_duration_s"] == 180
+    assert data["hr_mean"] == 84 and data["hr_records"] == 2
+    assert len(data["daily_series"]) == 7
+    assert data["daily_series"][0]["hr_mean"] == 90
+    assert data["daily_series"][1]["hr_mean"] is None
+    assert data["daily_series"][2]["records"] == 2
+    assert data["daily_series"][3]["records"] == 0
+    for sentinel in ("other_private_record", "own_synthetic_record", "own_incomplete_record",
+                     "own_recycled_record", "private note", "private name", "grant_token", SECRET):
+        assert sentinel not in response.text
+    assert contract.outsider.get("/api/v1/me/ecg/weekly-summary").status_code == 409
+    assert contract.heartlife.get("/api/v1/me/weekly-report").json() == before
+    exported = contract.heartlife.get("/api/v1/me/export")
+    assert exported.status_code == 200
+    assert "ecg_user" not in exported.text and "weighted_monday" not in exported.text
+    contract.transport.available = False
+    assert contract.heartlife.get("/api/v1/me/ecg/weekly-summary").status_code == 503
+    assert contract.heartlife.get("/api/v1/me/weekly-report").json() == before
+    assert contract.heartlife.get("/api/v1/me/dashboard").status_code == 200
+
+
+def test_weekly_summary_uses_actual_dst_midnights_end_to_end(contract):
+    contract.bind()
+    changed = contract.heartlife.patch("/api/v1/me", json={"timezone": "America/New_York"})
+    assert changed.status_code == 200, changed.text
+    # 2026-11-01 has 25 local hours; use the next local Monday as an exclusive upper bound.
+    for session_id, stamp in (
+        ("outside_before", "2026-10-26T03:59:59Z"),
+        ("monday_start", "2026-10-26T04:00:00Z"),
+        ("sunday_first_0130", "2026-11-01T05:30:00Z"),
+        ("sunday_second_0130", "2026-11-01T06:30:00Z"),
+        ("sunday_end", "2026-11-02T04:59:59Z"),
+        ("outside_after", "2026-11-02T05:00:00Z"),
+    ):
+        contract.record(session_id, stamp)
+    response = contract.heartlife.get("/api/v1/me/ecg/weekly-summary", params={"week_start": "2026-10-26"})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["timezone"] == "America/New_York"
+    assert data["observed_days"] == 7 and data["total_records"] == 4
+    assert data["daily_series"][0]["records"] == 1
+    assert data["daily_series"][6]["records"] == 3
+    assert data["hr_mean"] is None

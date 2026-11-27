@@ -8,6 +8,8 @@ import type { EcgLink, EcgPeriod, EcgSummary } from '../types/ecg'
 import PageHeader from '../components/common/PageHeader.vue'
 import HealthMetricCard from '../components/common/HealthMetricCard.vue'
 import EcgTrend from '../components/common/EcgTrend.vue'
+import EcgMeasurementPanel from '../components/common/EcgMeasurementPanel.vue'
+import { clearPendingMeasurement } from '../utils/ecgPending'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import ErrorState from '../components/common/ErrorState.vue'
 import LoadingState from '../components/common/LoadingState.vue'
@@ -68,6 +70,7 @@ async function loadLink() {
     const data = await apiRequest<EcgLink>('/me/ecg/link', { signal: requestController.signal })
     if (!isCurrent(ctx)) return
     link.value = data
+    if (!data.linked || data.revocation_pending || !data.measurement_allowed) clearPendingMeasurement(auth.user?.id)
     if (data.enabled && data.linked && !data.revocation_pending) void loadSummary()
   } catch (err) {
     if (isCurrent(ctx) && !aborted(err)) error.value = errorText(err)
@@ -89,7 +92,10 @@ async function loadSummary() {
     const data = await apiRequest<EcgSummary>('/me/ecg/summary', {
       signal: summaryController.signal, params: { period: period.value, anchor: anchor.value },
     })
-    if (isCurrent(ctx) && seq === summarySequence && linked.value) summary.value = data
+    if (isCurrent(ctx) && seq === summarySequence && linked.value) {
+      summary.value = data
+      if (link.value && data.measurement_allowed !== undefined) link.value.measurement_allowed = data.measurement_allowed
+    }
   } catch (err) {
     if (isCurrent(ctx) && seq === summarySequence && !aborted(err)) summaryError.value = errorText(err)
   } finally {
@@ -138,6 +144,7 @@ async function bind() {
 
 async function revoke() {
   if (!auth.user || actionBusy.value || !link.value) return
+  clearPendingMeasurement(auth.user.id)
   stopRequests()
   const ctx = context()
   requestController = new AbortController()
@@ -204,7 +211,7 @@ onBeforeUnmount(stopRequests)
 
 <template>
   <div class="stack ecg-page">
-    <PageHeader title="我的心电记录" subtitle="关联本人心电账号，查看测量摘要与趋势。" back-to="/" back-label="返回首页">
+    <PageHeader title="我的心电记录" subtitle="查看本人测量摘要与趋势，授权后可发起测量。" back-to="/" back-label="返回首页">
       <template #actions>
         <a v-if="ecgUrl" :href="ecgUrl" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
           <ExternalLink :size="18" aria-hidden="true" />打开心电工作台
@@ -237,7 +244,7 @@ onBeforeUnmount(stopRequests)
           </div>
           <label class="checkbox-label">
             <input v-model="consent" type="checkbox" :disabled="actionBusy" required />
-            <span>这是我本人的心电账号，同意心伴只读展示记录摘要和趋势。可随时解除关联。</span>
+            <span>这是我本人的心电账号，同意心伴展示摘要和趋势。测量权限以心电平台的单独授权为准，可随时解除关联。</span>
           </label>
           <button type="submit" class="btn btn-primary" :disabled="actionBusy || !consent || !code.trim()">{{ actionBusy ? '正在关联…' : '确认关联' }}</button>
         </form>
@@ -245,10 +252,11 @@ onBeforeUnmount(stopRequests)
       <template v-else>
         <section class="hl-card row-between" aria-label="已关联的心电账号">
           <div class="stack-sm"><h2 class="section-title">心电账号：{{ link.ecg_username }}</h2>
-            <p class="text-sm hl-muted">仅本人查看 · 只读摘要<span v-if="link.expires_at"> · 授权至 {{ timestamp(link.expires_at) }}</span></p>
+            <p class="text-sm hl-muted">仅本人查看 · {{ link.measurement_allowed ? '已授权固定时长测量' : '只读摘要' }}<span v-if="link.expires_at"> · 授权至 {{ timestamp(link.expires_at) }}</span></p>
           </div>
           <button type="button" class="btn btn-secondary" :disabled="actionBusy" @click="revokeDialog = true">解除关联</button>
         </section>
+        <EcgMeasurementPanel :measurement-allowed="link.measurement_allowed === true" :ecg-url="ecgUrl" :connect-url="connectUrl" :authorization-expires-at="link.expires_at" @completed="loadSummary" />
         <section class="hl-card stack-sm" aria-label="心电趋势筛选">
           <div class="row-between">
             <div class="row-wrap" role="group" aria-label="统计周期">
@@ -287,7 +295,7 @@ onBeforeUnmount(stopRequests)
         </template>
       </template>
     </template>
-    <ConfirmDialog v-model:open="revokeDialog" title="解除心电账号关联" description="心伴将停止读取心电摘要。心电平台的原始记录不会删除。" confirm-label="确认解除" danger :loading="actionBusy" @confirm="revoke" />
+    <ConfirmDialog v-model:open="revokeDialog" title="解除心电账号关联" description="心伴将停止读取摘要和发起测量。已经下发的测量仍可能继续，原始记录不会删除。" confirm-label="确认解除" danger :loading="actionBusy" @confirm="revoke" />
   </div>
 </template>
 

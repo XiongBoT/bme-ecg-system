@@ -1,4 +1,4 @@
-const test=require('node:test'),assert=require('node:assert/strict');
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const {safeUrl,createController}=require('../web/heartlife_core.js');
 const user={id:'alice',username:'alice'};
 function response(data,status=200,owner='alice'){
@@ -37,8 +37,11 @@ test('code requires consent, sends CSRF, and does not duplicate pending mutation
   const pending=h.controller.generate(true);await h.controller.generate(true);
   const mutations=h.calls.filter(call=>call.path.endsWith('link-code'));assert.equal(mutations.length,1);
   assert.equal(mutations[0].headers['X-CSRF-Token'],'csrf-alice');assert.equal(mutations[0].credentials,'same-origin');assert.equal(mutations[0].redirect,'error');
+  assert.deepEqual(JSON.parse(mutations[0].body),{measurement_allowed:false});
+  assert.equal(mutations[0].headers['Content-Type'],'application/json');
   finish(response({code:'one-time-code',expires_at:100}));await pending;
   assert.equal(h.state.code,'one-time-code');h.controller.expire(101);assert.equal(h.state.code,'');assert.match(h.state.message,/过期/);
+  assert.equal(h.state.code_measurement_allowed,false);
 });
 test('late code response cannot reappear after logout or account switch',async()=>{
   const h=harness();await h.controller.load();let finish;
@@ -71,4 +74,82 @@ test('network errors clear codes and show an actionable message',async()=>{
   await h.controller.generate(true);
   assert.equal(h.state.code,'');assert.equal(h.state.phase,'ready');assert.match(h.state.message,/检查网络/);
   assert.ok(!h.state.message.includes('transport'));
+});
+
+test('measurement permission is opt-in and only explicit true is sent',async()=>{
+  const h=harness();await h.controller.load();
+  h.routes.set('/api/heartlife/link-code',options=>response({code:'measurement-code',expires_at:100,measurement_allowed:JSON.parse(options.body).measurement_allowed}));
+  await h.controller.generate(true,true);
+  assert.deepEqual(JSON.parse(h.calls.at(-1).body),{measurement_allowed:true});
+  assert.equal(h.state.code_measurement_allowed,true);
+  await h.controller.generate(true,'true');
+  assert.deepEqual(JSON.parse(h.calls.at(-1).body),{measurement_allowed:false});
+  assert.equal(h.state.code_measurement_allowed,false);
+});
+
+test('older responses remain read-only and code scope comes from the server',async()=>{
+  const h=harness();h.routes.set('/api/heartlife/link',()=>response({enabled:true,linked:true,expires_at:100}));
+  await h.controller.load();assert.equal(h.state.measurement_allowed,false);
+  const count=h.calls.length;await h.controller.generate(true,true);
+  assert.equal(h.calls.length,count,'existing read-only links cannot be upgraded in place');
+  h.routes.set('/api/heartlife/link',()=>response({revoked:true}));await h.controller.revoke();
+  h.routes.set('/api/heartlife/link-code',()=>response({code:'legacy-code',expires_at:100}));
+  await h.controller.generate(true,true);assert.equal(h.state.code_measurement_allowed,false);
+});
+
+test('current measurement scope survives failed revoke and resets only on success',async()=>{
+  const h=harness();h.routes.set('/api/heartlife/link',options=>options.method==='DELETE'?response({detail:'服务暂时不可用'},503):response({enabled:true,linked:true,measurement_allowed:true,expires_at:100}));
+  await h.controller.load();assert.equal(h.state.measurement_allowed,true);
+  await h.controller.revoke();assert.equal(h.state.measurement_allowed,true);assert.equal(h.state.linked,true);
+  h.routes.set('/api/heartlife/link',()=>response({revoked:true}));await h.controller.revoke();
+  assert.equal(h.state.measurement_allowed,false);assert.equal(h.state.code_measurement_allowed,false);
+  assert.match(h.state.message,/已下发的测量不会因此取消/);
+});
+
+test('generated measurement scope clears on expiry, account reset and late replies',async()=>{
+  const h=harness();await h.controller.load();
+  h.routes.set('/api/heartlife/link-code',()=>response({code:'measurement-code',measurement_allowed:true,expires_at:100}));
+  await h.controller.generate(true,true);h.controller.expire(101);
+  assert.equal(h.state.code_measurement_allowed,false);
+  let finish;h.routes.set('/api/heartlife/link-code',()=>new Promise(resolve=>finish=resolve));
+  const pending=h.controller.generate(true,true);h.controller.clear();
+  finish(response({code:'late-code',measurement_allowed:true,expires_at:100}));await pending;
+  assert.equal(h.state.code_measurement_allowed,false);assert.equal(h.state.measurement_allowed,false);assert.equal(h.state.code,'');
+});
+
+function pageHarness(){
+  const elements=new Map(),calls=[];let render;
+  const element=id=>{if(!elements.has(id))elements.set(id,{checked:false,hidden:false,value:'',textContent:'',removeAttribute(){},focus(){},select(){}});return elements.get(id);};
+  const controller={load(){},expire(){},clear(){},login(){},logout(){},generate(...values){calls.push(values);},revoke(){calls.push('revoke');}};
+  const context=vm.createContext({document:{getElementById:element},window:{addEventListener(){}},navigator:{},fetch(){},setInterval(){},clearInterval(){},confirm:()=>true,
+    ECGHeartLife:{createController(_fetch,changed){render=changed;return controller;}}});
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/heartlife-connect.js'),'utf8'),context);
+  return {element,calls,render,context};
+}
+
+test('authorization page defaults to unchecked optional measurement and submits user choices',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'../web/heartlife-connect.html'),'utf8');
+  const input=html.match(/<input\b[^>]*id="bridge-measurement-consent"[^>]*>/)?.[0];
+  assert.ok(input);assert.doesNotMatch(input,/\b(?:checked|required)\b/);
+  const h=pageHarness();h.render({phase:'ready',user,enabled:true,linked:false,code:''});
+  h.element('bridge-consent').checked=true;
+  h.element('bridge-code-form').onsubmit({preventDefault(){}});
+  assert.deepEqual(h.calls[0],[true,false]);
+  h.element('bridge-measurement-consent').checked=true;h.element('bridge-code-form').onsubmit({preventDefault(){}});
+  assert.deepEqual(h.calls[1],[true,true]);
+});
+
+test('authorization page shows granted scope independently from draft and clears checkboxes',()=>{
+  const h=pageHarness();h.element('bridge-measurement-consent').checked=true;
+  h.render({phase:'ready',user,linked:true,measurement_allowed:false,code:'',code_measurement_allowed:false});
+  assert.match(h.element('bridge-link-scope').textContent,/只读/);assert.equal(h.element('bridge-code-form').hidden,true);
+  h.render({phase:'ready',user,linked:false,code:'read-only-code',code_measurement_allowed:false});
+  assert.match(h.element('bridge-code-scope').textContent,/只读/);
+  h.render({phase:'ready',user,linked:true,measurement_allowed:true,code:''});
+  assert.match(h.element('bridge-link-scope').textContent,/发起测量/);
+  h.element('bridge-consent').checked=true;h.element('bridge-revoke').onclick();
+  assert.equal(h.element('bridge-consent').checked,false);assert.equal(h.element('bridge-measurement-consent').checked,false);
+  assert.equal(h.calls.at(-1),'revoke');
+  h.element('bridge-measurement-consent').checked=true;h.render({phase:'login',user:null,linked:false,code:''});
+  assert.equal(h.element('bridge-measurement-consent').checked,false);
 });
