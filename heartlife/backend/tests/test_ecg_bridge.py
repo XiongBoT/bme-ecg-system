@@ -36,7 +36,9 @@ def bridge(app_instance, test_settings, fake_clock):
     test_settings.ecg_external_url = "https://ecg.example.test"
     test_settings.ecg_client_secret = SECRET
     calls = []
-    state = {"outage": False, "wrong_owner": False, "invalid_grant": False}
+    state = {"outage": False, "wrong_owner": False, "invalid_grant": False,
+             "measurement_allowed": False, "measurement_conflict": False,
+             "wrong_week": False, "wrong_measurement": False, "control_forbidden": False}
 
     def handle(request):
         calls.append(request)
@@ -46,16 +48,60 @@ def bridge(app_instance, test_settings, fake_clock):
         if request.url.path == "/api/heartlife/exchange":
             assert json.loads(request.content)["code"] == CODE
             return httpx.Response(200, json={"grant_token": TOKEN, "ecg_user_id": ECG_ID,
-                "ecg_username": "ecg_alice", "expires_at": (fake_clock.now() + timedelta(days=30)).timestamp()})
+                "ecg_username": "ecg_alice", "expires_at": (fake_clock.now() + timedelta(days=30)).timestamp(),
+                "measurement_allowed": state["measurement_allowed"]})
         assert request.headers["X-HeartLife-Subject"]
         if request.method == "DELETE":
             return httpx.Response(200, json={"revoked": True})
         assert request.headers["Authorization"] == "Bearer " + TOKEN
         if state["invalid_grant"]:
             return httpx.Response(401, json={"detail": "invalid"})
+        if state["control_forbidden"] and request.url.path in ("/api/heartlife/devices", "/api/heartlife/measurements"):
+            return httpx.Response(403, json={"detail": "private upstream authorization detail"})
+        envelope = {
+            "ecg_user": {"id": "f" * 32 if state["wrong_owner"] else ECG_ID, "username": "ecg_alice"},
+            "expires_at": (fake_clock.now() + timedelta(days=30)).timestamp(),
+            "measurement_allowed": state["measurement_allowed"],
+        }
+        if request.url.path == "/api/heartlife/devices":
+            return httpx.Response(200, json={**envelope, "devices": [{
+                "device_id": "pi-unit", "label": "采集终端", "online": True,
+                "ready": True, "reason": "可以测量", "owner_id": "private-owner",
+            }]})
+        if request.url.path == "/api/heartlife/measurements":
+            if state["measurement_conflict"]:
+                return httpx.Response(409, json={"detail": "private database or device details"})
+            measurement = {
+                "id": "m" * 32, "device_id": "pi-unit", "duration_s": 60,
+                "status": "completed", "created_at": fake_clock.now().timestamp(),
+                "expires_at": (fake_clock.now() + timedelta(seconds=45)).timestamp(),
+                "updated_at": fake_clock.now().timestamp(), "session_id": "serial-001",
+                "message": "已上传，等待查看报告", "report": {"model": "not_started", "physiology": "queued"},
+                "owner_id": "private-owner",
+            }
+            if request.method == "POST":
+                sent = json.loads(request.content)
+                measurement.update(device_id=sent["device_id"], duration_s=sent["duration_s"])
+                if state["wrong_measurement"]:
+                    measurement["duration_s"] = 300 if sent["duration_s"] == 60 else 60
+                return httpx.Response(202, json={**envelope, "measurement": measurement})
+            return httpx.Response(200, json={**envelope, "measurements": [measurement]})
+        if request.url.path == "/api/heartlife/weekly-summary":
+            from datetime import date
+            ws = date.fromisoformat(request.url.params["week_start"])
+            return httpx.Response(200, json={**envelope,
+                "week_start": (ws + timedelta(days=7) if state["wrong_week"] else ws).isoformat(),
+                "week_end": (ws + timedelta(days=6)).isoformat(),
+                "timezone": request.url.params["timezone"],
+                "observed_days": int(request.url.params["observed_days"]),
+                "total_records": 0, "total_duration_s": 0.0, "hr_mean": None, "hr_records": 0,
+                "daily_series": [{"date": (ws + timedelta(days=n)).isoformat(), "records": 0,
+                    "duration_s": 0.0, "hr_mean": None, "hr_records": 0} for n in range(7)],
+            })
         return httpx.Response(200, json={
             "ecg_user": {"id": "f" * 32 if state["wrong_owner"] else ECG_ID, "username": "ecg_alice"},
             "expires_at": (fake_clock.now() + timedelta(days=30)).timestamp(),
+            "measurement_allowed": state["measurement_allowed"],
             "recent_records": [{"session_id": "serial-001", "started_utc": "2026-11-25T01:00:00Z", "duration_s": 60.0, "hr_mean": None, "secret_note": "not allowed"}],
             "trends": {"period": request.url.params["period"], "anchor": request.url.params["anchor"],
                 "utc_offset_minutes": int(request.url.params["utc_offset_minutes"]),
@@ -306,3 +352,175 @@ def test_upgrade_existing_database_preserves_users_and_adds_link_table(tmp_path)
         assert db.get(User, "a" * 32).nickname == "保留用户"
         assert db.scalars(select(EcgLink)).all() == []
     engine.dispose()
+
+
+def test_readonly_bindings_cannot_get_control_permissions_from_request(client, bridge):
+    _, csrf = login(client)
+    response = client.post("/api/v1/me/ecg/link", headers=csrf, json={"code": CODE, "measurement_allowed": True})
+    assert response.status_code == 422
+    response = client.post("/api/v1/me/ecg/link", headers=csrf, json={"code": CODE})
+    assert response.json()["measurement_allowed"] is False
+    count = len(bridge[0])
+    assert client.get("/api/v1/me/ecg/devices").status_code == 403
+    assert client.get("/api/v1/me/ecg/measurements").status_code == 403
+    assert client.post("/api/v1/me/ecg/measurements", headers=csrf, json={
+        "device_id": "pi-unit", "duration_s": 60, "request_key": "a" * 32,
+    }).status_code == 403
+    assert len(bridge[0]) == count
+    # Old grants still support independent, private weekly summaries.
+    assert client.get("/api/v1/me/ecg/weekly-summary").status_code == 200
+
+
+def test_measurement_devices_create_poll_and_exact_retry_key(client, bridge, db_session):
+    bridge[1]["measurement_allowed"] = True
+    uid, csrf = login(client)
+    response = client.post("/api/v1/me/ecg/link", headers=csrf, json={"code": CODE})
+    assert response.json()["measurement_allowed"] is True
+    assert db_session.get(EcgLink, uid).measurement_allowed is True
+    response = client.get("/api/v1/me/ecg/devices")
+    assert response.status_code == 200
+    assert response.json()["devices"][0]["ready"] is True
+    assert "owner_id" not in response.text
+    payload = {"device_id": "pi-unit", "duration_s": 180, "request_key": "a" * 32}
+    assert client.post("/api/v1/me/ecg/measurements", json=payload).status_code == 403
+    for _ in range(2):
+        response = client.post("/api/v1/me/ecg/measurements", headers=csrf, json=payload)
+        assert response.status_code == 202, response.text
+        assert response.json()["measurement"]["duration_s"] == 180
+        assert json.loads(bridge[0][-1].content) == payload
+    response = client.get("/api/v1/me/ecg/measurements")
+    assert response.status_code == 200
+    item = response.json()["measurements"][0]
+    assert item["status"] == "completed"
+    assert item["report"] == {"model": "not_started", "physiology": "queued"}
+    assert item["report_url"] == "https://ecg.example.test/?record=serial-001"
+    assert "owner_id" not in response.text and TOKEN not in response.text
+
+
+def test_measurement_validation_errors_and_mismatch_are_safe(client, bridge):
+    bridge[1]["measurement_allowed"] = True
+    _, csrf = login(client)
+    client.post("/api/v1/me/ecg/link", headers=csrf, json={"code": CODE})
+    payload = {"device_id": "pi-unit", "duration_s": 60, "request_key": "a" * 32}
+    count = len(bridge[0])
+    for invalid in ({**payload, "duration_s": 120}, {**payload, "request_key": "short"},
+                    {**payload, "owner_id": "another"}):
+        assert client.post("/api/v1/me/ecg/measurements", headers=csrf, json=invalid).status_code == 422
+    assert len(bridge[0]) == count
+    bridge[1]["measurement_conflict"] = True
+    response = client.post("/api/v1/me/ecg/measurements", headers=csrf, json=payload)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "ECG_MEASUREMENT_CONFLICT"
+    assert "private database" not in response.text
+    bridge[1]["measurement_conflict"] = False
+    bridge[1]["wrong_measurement"] = True
+    assert client.post("/api/v1/me/ecg/measurements", headers=csrf, json=payload).status_code == 502
+    bridge[1]["wrong_measurement"] = False
+    bridge[1]["wrong_owner"] = True
+    assert client.get("/api/v1/me/ecg/devices").status_code == 502
+
+
+def test_weekly_summary_uses_account_timezone_and_validates_returned_week(client, bridge, fake_clock):
+    from datetime import datetime, timezone
+    _, csrf = login(client)
+    client.post("/api/v1/me/ecg/link", headers=csrf, json={"code": CODE})
+    client.patch("/api/v1/me", headers=csrf, json={"timezone": "America/New_York"})
+    # UTC Monday is still Sunday in New York: the local report remains the previous week.
+    fake_clock.set(datetime(2026, 11, 30, 2, 0, tzinfo=timezone.utc))
+    response = client.get("/api/v1/me/ecg/weekly-summary")
+    assert response.status_code == 200, response.text
+    assert response.json()["week_start"] == "2026-11-23"
+    assert response.json()["observed_days"] == 7
+    assert response.json()["hr_mean"] is None
+    assert bridge[0][-1].url.params["timezone"] == "America/New_York"
+    assert "utc_offset_minutes" not in bridge[0][-1].url.params
+    assert len(response.json()["daily_series"]) == 7
+    assert client.get("/api/v1/me/ecg/weekly-summary?week_start=2026-11-24").status_code == 422
+    assert client.get("/api/v1/me/ecg/weekly-summary?week_start=2026-11-30").status_code == 422
+    assert client.get("/api/v1/me/ecg/weekly-summary?timezone=Asia/Shanghai").status_code == 422
+    bridge[1]["wrong_week"] = True
+    assert client.get("/api/v1/me/ecg/weekly-summary").status_code == 502
+
+
+def test_control_response_after_revoke_is_discarded(client, bridge, app_instance):
+    bridge[1]["measurement_allowed"] = True
+    uid, csrf = login(client)
+    client.post("/api/v1/me/ecg/link", headers=csrf, json={"code": CODE})
+    upstream = app_instance.dependency_overrides[get_ecg_client]()
+    original = upstream.devices
+
+    def revoke_during_request(*args, **kwargs):
+        result = original(*args, **kwargs)
+        with app_instance.state.session_factory() as db:
+            db.get(EcgLink, uid).state = "revocation_pending"
+            db.commit()
+        return result
+
+    upstream.devices = revoke_during_request
+    app_instance.dependency_overrides[get_ecg_client] = lambda: upstream
+    response = client.get("/api/v1/me/ecg/devices")
+    assert response.status_code == 409
+    assert "pi-unit" not in response.text
+
+
+def test_weekly_outage_does_not_change_life_report_or_export(client, bridge):
+    _, csrf = login(client)
+    client.post("/api/v1/me/ecg/link", headers=csrf, json={"code": CODE})
+    bridge[1]["outage"] = True
+    assert client.get("/api/v1/me/ecg/weekly-summary").status_code == 503
+    assert client.get("/api/v1/me/weekly-report").status_code == 200
+    exported = client.get("/api/v1/me/export")
+    assert exported.status_code == 200
+    assert "ecg_user" not in exported.text and TOKEN not in exported.text
+
+
+def test_denied_device_permission_does_not_revoke_readonly_data(client, bridge):
+    bridge[1]["measurement_allowed"] = True
+    _, csrf = login(client)
+    client.post("/api/v1/me/ecg/link", headers=csrf, json={"code": CODE})
+    bridge[1]["control_forbidden"] = True
+    response = client.get("/api/v1/me/ecg/devices")
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "ECG_MEASUREMENT_FORBIDDEN"
+    assert "private upstream" not in response.text
+    link = client.get("/api/v1/me/ecg/link").json()
+    assert link["linked"] is True and link["revocation_pending"] is False
+    assert client.get("/api/v1/me/ecg/weekly-summary").status_code == 200
+
+
+def test_existing_link_migration_does_not_upgrade_measurement_permission(tmp_path):
+    from app.db.database import build_session_factory
+    from app.db.migrations_runner import run_migrations
+
+    db_url = f"sqlite:///{(tmp_path / 'old-link.db').as_posix()}"
+    run_migrations(db_url)
+    engine, factory = build_session_factory(db_url)
+    with factory() as db:
+        db.add(User(id="a" * 32, account="existing", password_hash="unused", nickname="保留用户"))
+        db.flush()
+        db.add(EcgLink(user_id="a" * 32, operation_id="b" * 32, state="active",
+                       grant_token=TOKEN, ecg_user_id=ECG_ID, measurement_allowed=True))
+        db.commit()
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ALTER TABLE ecg_links DROP COLUMN measurement_allowed")
+        connection.exec_driver_sql("UPDATE alembic_version SET version_num='0002_ecg_links'")
+    engine.dispose()
+    run_migrations(db_url)
+    engine, factory = build_session_factory(db_url)
+    with factory() as db:
+        row = db.get(EcgLink, "a" * 32)
+        assert row.grant_token == TOKEN and row.operation_id == "b" * 32
+        assert row.state == "active" and row.measurement_allowed is False
+        assert db.get(User, "a" * 32).nickname == "保留用户"
+    engine.dispose()
+
+
+def test_weekly_and_measurement_routes_reject_browser_scoping_parameters(client, bridge):
+    bridge[1]["measurement_allowed"] = True
+    _, csrf = login(client)
+    client.post("/api/v1/me/ecg/link", headers=csrf, json={"code": CODE})
+    count = len(bridge[0])
+    for path in ("devices?owner_id=another", "measurements?subject_id=another",
+                 "weekly-summary?observed_days=7", "weekly-summary?week_start=2026-11-23&week_start=2026-11-16"):
+        assert client.get("/api/v1/me/ecg/" + path).status_code == 422
+    assert len(bridge[0]) == count

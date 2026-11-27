@@ -75,6 +75,7 @@ class EcgLink(Base):
     grant_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
     expires_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="binding")
+    measurement_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     cleanup_after: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
 

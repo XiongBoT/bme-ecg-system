@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from urllib.parse import urlencode, urlsplit, urlunsplit
 import uuid
 from zoneinfo import ZoneInfo
@@ -9,11 +9,12 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.clock import Clock
+from app.core.clock import Clock, user_local_date
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.models import EcgLink, User
 from app.ecg.client import EcgClient
+from app.ecg.schemas import MeasurementRequest
 
 
 # A lost response can still have committed upstream. Its code can no longer be
@@ -47,6 +48,7 @@ def link_status(db: Session, uid: str, settings: Settings, clock: Clock) -> dict
         "expires_at": row.expires_at if row else None,
         "ecg_url": settings.ecg_external_url,
         "revocation_pending": bool(row and not active),
+        "measurement_allowed": bool(active and row.measurement_allowed),
     }
 
 
@@ -92,6 +94,7 @@ def bind(db: Session, uid: str, code: str, settings: Settings, clock: Clock, ups
         row.ecg_username = result.ecg_username
         row.grant_token = result.grant_token
         row.expires_at = result.expires_at
+        row.measurement_allowed = result.measurement_allowed
         row.state = "active"
         row.cleanup_after = 0
         db.commit()
@@ -185,3 +188,105 @@ def summary(db: Session, uid: str, period: str, anchor: date,
     for record in result["recent_records"]:
         record["report_url"] = urlunsplit((public.scheme, public.netloc, "/", urlencode({"record": record["session_id"]}), ""))
     return result
+
+
+def _linked_request(db: Session, uid: str, clock: Clock, call, *, control: bool = False):
+    """Perform bounded upstream I/O without holding a local transaction open.
+
+    Both the local operation and upstream owner are checked again before any
+    result is returned. ECG remains the authority for grant/device permissions.
+    """
+    _active_user(db, uid)
+    row = _row(db, uid)
+    if not row or row.state != "active" or not row.grant_token:
+        raise AppError(409, "ECG_NOT_LINKED", "请先完成心电账号关联")
+    if not row.expires_at or row.expires_at <= clock.now().timestamp():
+        raise AppError(409, "ECG_LINK_EXPIRED", "心电授权已过期，请解除关联后重新绑定")
+    if control and not row.measurement_allowed:
+        raise AppError(403, "ECG_MEASUREMENT_FORBIDDEN", "当前关联仅允许查看，请在心电平台重新授权测量后绑定")
+    token, operation, expected_owner = row.grant_token, row.operation_id, row.ecg_user_id
+    db.rollback()
+    try:
+        data = call(token)
+    except AppError as exc:
+        if exc.code == "ECG_LINK_EXPIRED":
+            _lock(db)
+            current = _row(db, uid)
+            if current and current.operation_id == operation:
+                current.state = "revocation_pending"
+            db.commit()
+        raise
+    if data.ecg_user.id != expected_owner or (control and not data.measurement_allowed):
+        raise AppError(502, "ECG_INVALID_RESPONSE", "心电服务返回的账号或授权范围不匹配")
+    _active_user(db, uid)
+    current = _row(db, uid)
+    if (not current or current.operation_id != operation or current.state != "active"
+            or current.grant_token != token):
+        raise AppError(409, "ECG_LINK_CHANGED", "心电关联已改变，请刷新页面；已提交的测量可能仍在执行")
+    if not current.expires_at or min(current.expires_at, data.expires_at) <= clock.now().timestamp():
+        raise AppError(409, "ECG_LINK_EXPIRED", "心电授权已过期，请解除关联后重新绑定")
+    if control and not current.measurement_allowed:
+        raise AppError(403, "ECG_MEASUREMENT_FORBIDDEN", "测量授权已改变，请重新确认")
+    return data
+
+
+def devices(db: Session, uid: str, settings: Settings, clock: Clock, upstream: EcgClient) -> dict:
+    return _linked_request(db, uid, clock, lambda token: upstream.devices(uid, token), control=True).model_dump()
+
+
+def _report_url(settings: Settings, session_id: str | None, status: str) -> str | None:
+    if not session_id or status != "completed":
+        return None
+    public = urlsplit(settings.ecg_external_url or "")
+    return urlunsplit((public.scheme, public.netloc, "/", urlencode({"record": session_id}), ""))
+
+
+def measurements(db: Session, uid: str, settings: Settings, clock: Clock, upstream: EcgClient) -> dict:
+    result = _linked_request(db, uid, clock, lambda token: upstream.measurements(uid, token), control=True).model_dump()
+    for item in result["measurements"]:
+        item["report_url"] = _report_url(settings, item["session_id"], item["status"])
+    return result
+
+
+def create_measurement(db: Session, uid: str, payload: MeasurementRequest, settings: Settings,
+                       clock: Clock, upstream: EcgClient) -> dict:
+    data = _linked_request(db, uid, clock,
+        lambda token: upstream.create_measurement(uid, token, payload.model_dump()), control=True)
+    if data.measurement.device_id != payload.device_id or data.measurement.duration_s != payload.duration_s:
+        raise AppError(502, "ECG_INVALID_RESPONSE", "心电服务返回的测量与请求不匹配，请保留原请求重试")
+    result = data.model_dump()
+    item = result["measurement"]
+    item["report_url"] = _report_url(settings, item["session_id"], item["status"])
+    return result
+
+
+def weekly_summary(db: Session, uid: str, week_start: date | None, settings: Settings,
+                   clock: Clock, upstream: EcgClient) -> dict:
+    user = _active_user(db, uid)
+    tz_name = user.timezone
+    today_local = user_local_date(clock, tz_name)
+    current_monday = today_local - timedelta(days=today_local.weekday())
+    ws = week_start or current_monday
+    if ws.weekday() != 0:
+        raise AppError(422, "INVALID_WEEK_START", "week_start 必须为周一日期 (YYYY-MM-DD)")
+    if ws > current_monday:
+        raise AppError(422, "FUTURE_WEEK_FORBIDDEN", "不能查询未来周报")
+    observed_days = (today_local - ws).days + 1 if ws == current_monday else 7
+    params = {"week_start": ws.isoformat(), "timezone": tz_name, "observed_days": observed_days}
+    data = _linked_request(db, uid, clock, lambda token: upstream.weekly_summary(uid, token, params))
+    expected_dates = [(ws + timedelta(days=n)).isoformat() for n in range(7)]
+    if (data.week_start != ws.isoformat() or data.week_end != expected_dates[-1]
+            or data.timezone != tz_name or data.observed_days != observed_days
+            or [item.date for item in data.daily_series] != expected_dates):
+        raise AppError(502, "ECG_INVALID_RESPONSE", "心电服务返回的周报范围不匹配")
+    if (any(item.hr_records > item.records or (not item.hr_records and item.hr_mean is not None)
+            for item in data.daily_series)
+            or any(item.records or item.duration_s or item.hr_mean is not None or item.hr_records
+                   for item in data.daily_series[observed_days:])
+            or data.total_records != sum(item.records for item in data.daily_series)
+            or data.hr_records != sum(item.hr_records for item in data.daily_series)
+            or (not data.hr_records and data.hr_mean is not None)):
+        raise AppError(502, "ECG_INVALID_RESPONSE", "心电服务返回的周报统计不一致")
+    if _active_user(db, uid).timezone != tz_name:
+        raise AppError(409, "ECG_PERIOD_CHANGED", "账号时区已改变，请重新加载周报")
+    return data.model_dump()

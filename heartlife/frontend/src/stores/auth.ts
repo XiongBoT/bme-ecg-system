@@ -1,7 +1,8 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { api, ApiClientError, setCsrfToken } from '../api/client'
 import type { PublicConfig, UserProfile } from '../types/api'
+import { clearPendingMeasurement } from '../utils/ecgPending'
 
 export function sanitizeExternalHttpsUrl(raw: string | null | undefined): string | null {
   if (!raw || typeof raw !== 'string') return null
@@ -19,6 +20,9 @@ export function sanitizeExternalHttpsUrl(raw: string | null | undefined): string
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserProfile | null>(null)
+  watch(() => user.value?.id, (next, previous) => {
+    if (previous && previous !== next) clearPendingMeasurement(previous)
+  }, { flush: 'sync' })
   const initialized = ref(false)
   const configLoaded = ref(false)
   const unreadCount = ref(0)

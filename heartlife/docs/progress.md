@@ -20,6 +20,21 @@
 | TASK-12 | P2 家庭关怀一次性限时邀请码、最小字段共享与即时撤销 | PASS | `pytest tests/test_epic11_family.py -q` → Exit `1` | `pytest tests/test_epic11_family.py -q` + Playwright E2E → Exit `0` | T-1101~T-1105 | `app/family/`, `ProfileView.vue` |
 | TASK-13 | 视觉居中前端打磨、并发性能基准、全量回归与交付材料冻结 | PASS | 集成修复评论同秒分组排序与 CWD 相对库路径 | `scripts/check.py --suite all` Exit `0` + 浏览器 1280px/375px 实测通过 | 92 Pytest + 8 Vitest + 6 E2E | `frontend/src/`, `scripts/benchmark_perf.py`, `docs/` |
 
+## 心电集成第二轮（任务 #85，2026-11-27）
+
+本轮在第一轮合并提交 `751e83d` 上实现另行授权的测量、进度及独立私密心电周报。沿用旧账号与设备规则，不自动扩大旧授权，不触发生产部署或公开安装包发布。
+
+| 检查 | 状态 | 实际执行与证据 |
+| --- | --- | --- |
+| 心电网页回归 | PASS | `node --test 心电云端平台/tests/*.test.cjs`：退出码 0，190 项通过、0 跳过；包括 15 项授权页测试 |
+| 心电 Python 局部回归 | PASS | 短程 `unittest`：31 项通过，命令退出码均为 0，覆盖 5 项新测量、1 项旧表迁移、13 项原桥接、10 项原健康助手与 2 项趋势测试；首次新测试执行退出码 1，原因是尚未实现接口及本地缺少时区数据 |
+| Python 与双服务完整契约 | IN_PROGRESS | 新增旧授权、幂等、设备隔离、周边界、撤销竞态与报告状态用例；周统计涉及本地缺少的 `tzdata`，完整运行结果待 GitHub Actions |
+| 心伴前端回归与生产构建 | IN_PROGRESS | 新增测量和私人周报用例；完整 Vitest、类型检查及 `/heartlife/` 构建结果待 GitHub Actions |
+| 真实设备、手机视觉及生产部署 | DEFERRED | 本轮没有执行，不以自动化测试替代 |
+| 仓库与文档工具 | PASS | `python -m unittest discover -s tools -p 'test_*.py' -v`：退出码 0，26 项通过；文档链接及生成文件检查退出码 0 |
+
+本地没有完整心伴运行依赖；不把语法检查记为运行测试。第一轮本地依赖安装和浏览器配置曾因非必要遥测请求被自动审批拒绝，本轮沿用隔离 CI 完成完整验证，不重复该配置。
+
 ## 待人工验收项（诚实登记，不冒充自动化完成）
 
 1. **T-0508（科普来源人工核验）**：11 篇内置科普已整理公开权威来源链接并标记「课程内容审核（演示核验）」，正式对外发布前须由课程成员逐条点击外链核对原文并签字（清单见 `docs/knowledge-sources-review.md`）。

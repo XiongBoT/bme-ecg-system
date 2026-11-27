@@ -7,7 +7,10 @@ from pydantic import ValidationError
 from app.core.config import Settings
 from app.core.deps import get_settings
 from app.core.errors import AppError
-from app.ecg.schemas import ExchangeResult, SummaryResult
+from app.ecg.schemas import (
+    DevicesResult, ExchangeResult, MeasurementResult, MeasurementsResult,
+    SummaryResult, WeeklySummaryResult,
+)
 
 
 class EcgClient:
@@ -73,6 +76,50 @@ class EcgClient:
         if response.status_code != 200:
             raise AppError(503, "ECG_UNAVAILABLE", "心电服务暂时无法连接，请稍后重试")
         return self._data(response, SummaryResult)
+
+    @staticmethod
+    def _control_status(response: httpx.Response) -> None:
+        if response.status_code == 401:
+            raise AppError(409, "ECG_LINK_EXPIRED", "心电授权已失效，请解除关联后重新绑定")
+        if response.status_code == 403:
+            raise AppError(403, "ECG_MEASUREMENT_FORBIDDEN", "没有测量权限或设备授权，请在心电平台确认授权")
+        if response.status_code == 409:
+            raise AppError(409, "ECG_MEASUREMENT_CONFLICT", "设备离线、未就绪或已有任务，请刷新设备与测量进度后重试")
+        if response.status_code == 422:
+            raise AppError(422, "ECG_INVALID_MEASUREMENT", "测量参数不合法，请重新选择设备和时长")
+        if response.status_code == 429:
+            raise AppError(429, "ECG_RATE_LIMITED", "操作较多，请稍后重试")
+        if response.status_code not in (200, 202):
+            raise AppError(503, "ECG_UNAVAILABLE", "心电服务暂时无法连接，请稍后重试")
+
+    def devices(self, subject: str, token: str) -> DevicesResult:
+        response = self._request("GET", "/api/heartlife/devices", subject=subject, token=token)
+        self._control_status(response)
+        return self._data(response, DevicesResult)
+
+    def measurements(self, subject: str, token: str) -> MeasurementsResult:
+        response = self._request("GET", "/api/heartlife/measurements", subject=subject, token=token)
+        self._control_status(response)
+        return self._data(response, MeasurementsResult)
+
+    def create_measurement(self, subject: str, token: str, payload: dict) -> MeasurementResult:
+        # Preserve the caller's idempotency key; an uncertain response must never
+        # silently become another measurement with a generated replacement key.
+        response = self._request("POST", "/api/heartlife/measurements", subject=subject,
+                                 token=token, json=payload)
+        self._control_status(response)
+        return self._data(response, MeasurementResult)
+
+    def weekly_summary(self, subject: str, token: str, params: dict) -> WeeklySummaryResult:
+        response = self._request("GET", "/api/heartlife/weekly-summary", subject=subject,
+                                 token=token, params=params)
+        if response.status_code in (401, 403):
+            raise AppError(409, "ECG_LINK_EXPIRED", "心电授权已失效，请解除关联后重新绑定")
+        if response.status_code == 422:
+            raise AppError(422, "ECG_INVALID_PERIOD", "心电统计日期不合法")
+        if response.status_code != 200:
+            raise AppError(503, "ECG_UNAVAILABLE", "心电服务暂时无法连接，请稍后重试")
+        return self._data(response, WeeklySummaryResult)
 
     def revoke_subject(self, subject: str, operation: str) -> bool:
         response = self._request("DELETE", "/api/heartlife/subject-grant", subject=subject, operation=operation)

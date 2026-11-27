@@ -246,7 +246,7 @@ def create_app(data_dir=None, token=None, device_id=None, auth_enabled=None, coo
     app.state.backup_schedule = backup_schedule
 
     from heartlife_bridge import MACHINE_ROUTES, add_routes as add_heartlife_routes
-    heartlife = add_heartlife_routes(app, connect, identity, auth_enabled)
+    heartlife = add_heartlife_routes(app, connect, identity, auth_enabled, devices, workflow)
     app.state.heartlife = heartlife
 
     @app.middleware('http')

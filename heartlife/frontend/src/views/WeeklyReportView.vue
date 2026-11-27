@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
   CalendarCheck2,
   ChevronLeft,
@@ -11,7 +11,7 @@ import {
   RotateCcw,
   Target,
 } from 'lucide-vue-next'
-import { api, ApiClientError } from '../api/client'
+import { apiRequest, ApiClientError } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import { formatLocalDateToday, getMondayOfDate, shiftIsoDate } from '../utils/format'
 import PageHeader from '../components/common/PageHeader.vue'
@@ -19,6 +19,7 @@ import HealthMetricCard from '../components/common/HealthMetricCard.vue'
 import ChartWithDataTable from '../components/common/ChartWithDataTable.vue'
 import ErrorState from '../components/common/ErrorState.vue'
 import LoadingState from '../components/common/LoadingState.vue'
+import EcgWeeklySummary from '../components/common/EcgWeeklySummary.vue'
 import HlBadge from '../components/ui/HlBadge.vue'
 import type { WeeklyReportData } from '../types/api'
 
@@ -30,6 +31,8 @@ const selectedWeekStart = ref(currentMonday.value)
 const loading = ref(true)
 const errorMessage = ref('')
 const report = ref<WeeklyReportData | null>(null)
+let sequence = 0
+let controller: AbortController | null = null
 
 const isCurrentWeek = computed(() => selectedWeekStart.value >= currentMonday.value)
 
@@ -75,20 +78,24 @@ const planCompletionSubtext = computed(() => {
 })
 
 async function fetchReport(weekStart: string) {
-  loading.value = true
+  const seq = ++sequence
+  const userId = auth.user?.id
+  controller?.abort()
+  controller = new AbortController()
+  report.value = null
+  loading.value = Boolean(userId)
   errorMessage.value = ''
+  if (!userId) return
+  const current = () => seq === sequence && auth.user?.id === userId && selectedWeekStart.value === weekStart
   try {
-    const data = await api.get<WeeklyReportData>('/me/weekly-report', {
-      week_start: weekStart,
+    const data = await apiRequest<WeeklyReportData>('/me/weekly-report', {
+      params: { week_start: weekStart }, signal: controller.signal,
     })
-    report.value = data
-    if (data.week_start) {
-      selectedWeekStart.value = data.week_start
-    }
+    if (current()) report.value = data
   } catch (err) {
-    errorMessage.value = err instanceof ApiClientError ? err.message : '暂时无法加载，请重试'
+    if (current() && !(err instanceof Error && err.name === 'AbortError')) errorMessage.value = err instanceof ApiClientError ? err.message : '暂时无法加载，请重试'
   } finally {
-    loading.value = false
+    if (current()) loading.value = false
   }
 }
 
@@ -96,13 +103,11 @@ function shiftWeek(days: number) {
   const next = shiftIsoDate(selectedWeekStart.value, days)
   if (next > currentMonday.value) return
   selectedWeekStart.value = next
-  fetchReport(next)
 }
 
 function goToCurrentWeek() {
   if (isCurrentWeek.value) return
   selectedWeekStart.value = currentMonday.value
-  fetchReport(currentMonday.value)
 }
 
 function triggerPrint() {
@@ -111,9 +116,9 @@ function triggerPrint() {
   }
 }
 
-onMounted(() => {
-  fetchReport(selectedWeekStart.value)
-})
+watch(() => auth.user?.id, () => { selectedWeekStart.value = currentMonday.value }, { flush: 'sync' })
+watch(() => [auth.user?.id, auth.user?.timezone, selectedWeekStart.value], () => { void fetchReport(selectedWeekStart.value) }, { immediate: true, flush: 'sync' })
+onBeforeUnmount(() => { sequence += 1; controller?.abort() })
 </script>
 
 <template>
@@ -254,6 +259,7 @@ onMounted(() => {
       <!-- Trend Chart + Paired Accessible Breakdown Table (PRD §5.5 & UI-T22) -->
       <ChartWithDataTable :series="report.daily_series || []" />
     </template>
+    <EcgWeeklySummary v-if="auth.publicConfig.ecg_integration_enabled && auth.user" :week-start="selectedWeekStart" />
   </div>
 </template>
 
